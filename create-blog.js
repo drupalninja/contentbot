@@ -46,6 +46,12 @@ const argv = yargs(hideBin(process.argv))
     type: 'number',
     default: 0
   })
+  .option('youtube', {
+    alias: 'y',
+    description: 'Number of YouTube videos to fetch (0-5)',
+    type: 'number',
+    default: 0
+  })
   .option('subreddit', {
     alias: 's',
     description: 'Specific subreddit to search in (optional)',
@@ -174,14 +180,67 @@ async function fetchRedditPosts(topic, count = 0, subreddit = null) {
 }
 
 /**
+ * Fetch YouTube videos using the scrape-youtube.js script
+ * @param {string} topic - The topic to search for
+ * @param {number} count - Number of videos to fetch
+ * @returns {Promise<Array>} - Array of YouTube videos
+ */
+async function fetchYouTubeVideos(topic, count = 0) {
+  if (count <= 0) {
+    return [];
+  }
+
+  try {
+    console.log(`Fetching ${count} YouTube videos about "${topic}"...`);
+
+    // Create a temporary file to store the videos
+    const tempFile = path.join(__dirname, 'temp-youtube-videos.json');
+
+    // Build the command
+    const command = `node scrape-youtube.js --query "${topic}" --max ${count} --output "${tempFile}"`;
+
+    // Run the scrape-youtube.js script
+    execSync(command, {
+      stdio: 'inherit'
+    });
+
+    // Check if the file exists
+    if (!fs.existsSync(tempFile)) {
+      console.log('No YouTube videos were scraped. Continuing without YouTube videos.');
+      return [];
+    }
+
+    // Read the videos from the file
+    const videosData = fs.readFileSync(tempFile, 'utf8');
+    const videos = JSON.parse(videosData);
+
+    // Delete the temporary file
+    fs.unlinkSync(tempFile);
+
+    if (videos.length === 0) {
+      console.log('No YouTube videos were found. Continuing without YouTube videos.');
+      return [];
+    }
+
+    console.log(`Successfully fetched ${videos.length} YouTube videos.`);
+    return videos;
+  } catch (error) {
+    console.error('Error fetching YouTube videos:', error.message);
+    console.log('Continuing without YouTube videos.');
+    return [];
+  }
+}
+
+/**
  * Generate blog content using Groq API
  * @param {string} topic - The topic for the blog post
  * @param {Array} newsArticles - Array of news articles
  * @param {Array} redditPosts - Array of Reddit posts
+ * @param {Array} youtubeVideos - Array of YouTube videos
  * @param {string} model - The Groq model to use
  * @returns {Promise<string>} - The generated blog content
  */
-async function generateBlogContent(topic, newsArticles, redditPosts, model) {
+async function generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model) {
   try {
     console.log(`Generating blog post about "${topic}" using ${model}...`);
 
@@ -223,6 +282,27 @@ Please incorporate insights, perspectives, or discussions from these Reddit post
 `;
     }
 
+    let youtubeVideosText = '';
+    if (youtubeVideos.length > 0) {
+      youtubeVideosText = `
+Here are some relevant YouTube videos related to this topic that you should incorporate into the blog post:
+
+${youtubeVideos.map((video, index) => `
+YouTube Video ${index + 1}:
+Title: ${video.title}
+Channel: ${video.channelTitle}
+Description: ${video.description.substring(0, 500)}${video.description.length > 500 ? '...' : ''}
+Views: ${video.viewCount.toLocaleString()}
+Likes: ${video.likeCount.toLocaleString()}
+Comments: ${video.commentCount.toLocaleString()}
+Date: ${video.publishedAt}
+URL: ${video.url}
+`).join('\n')}
+
+Please incorporate insights, perspectives, or discussions from these YouTube videos into your blog post. You can reference specific points from the videos or summarize key takeaways. Don't just list the videos, but integrate them naturally into your content.
+`;
+    }
+
     const prompt = `
 Write a comprehensive, engaging, and informative blog post about "${topic}".
 
@@ -248,6 +328,7 @@ Format the blog post with proper Markdown syntax including:
 The blog post should be between 800-1200 words.
 ${newsArticlesText}
 ${redditPostsText}
+${youtubeVideosText}
 `;
 
     const completion = await groq.chat.completions.create({
@@ -298,7 +379,7 @@ async function main() {
       throw new Error('GROQ_API_KEY is not set in .env file');
     }
 
-    const { topic, output, model, news, reddit, subreddit } = argv;
+    const { topic, output, model, news, reddit, youtube, subreddit } = argv;
 
     // Fetch news articles
     const newsArticles = await fetchNewsArticles(topic, news);
@@ -306,8 +387,11 @@ async function main() {
     // Fetch Reddit posts
     const redditPosts = await fetchRedditPosts(topic, reddit, subreddit);
 
+    // Fetch YouTube videos
+    const youtubeVideos = await fetchYouTubeVideos(topic, youtube);
+
     // Generate blog content
-    const blogContent = await generateBlogContent(topic, newsArticles, redditPosts, model);
+    const blogContent = await generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model);
 
     // Write to markdown file
     writeToMarkdownFile(blogContent, output);
