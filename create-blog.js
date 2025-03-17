@@ -78,24 +78,24 @@ const argv = yargs(hideBin(process.argv))
     alias: 'b',
     description: 'Number of Bing news articles to fetch (0-5)',
     type: 'number',
-    default: 3
+    default: 5
   })
   .option('tavily', {
     description: 'Number of Tavily search results to fetch (0-5)',
     type: 'number',
-    default: 0
+    default: 5
   })
   .option('reddit', {
     alias: 'r',
     description: 'Number of Reddit posts to fetch (0-10)',
     type: 'number',
-    default: 0
+    default: 5
   })
   .option('youtube', {
     alias: 'y',
     description: 'Number of YouTube videos to fetch (0-5)',
     type: 'number',
-    default: 0
+    default: 5
   })
   .option('subreddit', {
     alias: 's',
