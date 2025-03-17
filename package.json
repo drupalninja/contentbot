@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "create-blog": "node create-blog.js",
+    "generate-topics": "node generate-topics.js",
     "setup": "node setup.js",
     "scrape-reddit": "node scrape-reddit.js",
     "scrape-youtube": "node scrape-youtube.js"
