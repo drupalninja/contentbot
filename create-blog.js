@@ -102,6 +102,11 @@ const argv = yargs(hideBin(process.argv))
     description: 'Specific subreddit to search in (optional)',
     type: 'string'
   })
+  .option('keywords', {
+    alias: 'k',
+    description: 'SEO keywords to target (comma-separated)',
+    type: 'string'
+  })
   .help()
   .alias('help', 'h')
   .argv;
@@ -394,9 +399,10 @@ ${prompt}`;
  * @param {Array} redditPosts - Array of Reddit posts
  * @param {Array} youtubeVideos - Array of YouTube videos
  * @param {string} model - The Groq model to use
+ * @param {string} keywords - SEO keywords to target (comma-separated)
  * @returns {Promise<string>} - The generated blog content
  */
-async function generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model) {
+async function generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model, keywords) {
   try {
     console.log(`Generating blog post about "${topic}" using ${model}...`);
 
@@ -459,11 +465,41 @@ Please incorporate insights, perspectives, or discussions from these YouTube vid
 `;
     }
 
+    let seoInstructionsText = '';
+    if (keywords) {
+      const keywordsList = keywords.split(',').map(k => k.trim());
+      seoInstructionsText = `
+SEO INSTRUCTIONS:
+Target the following keywords in your blog post:
+${keywordsList.map(keyword => `- "${keyword}"`).join('\n')}
+
+SEO guidelines:
+- Include the primary keyword (the first one in the list) in the title, first paragraph, and at least one heading
+- Use secondary keywords (the rest in the list) naturally throughout the content
+- Include keywords in image alt text suggestions if you reference images
+- Ensure keyword density is natural and not forced (around 1-2% of total word count)
+- Use variations and synonyms of the keywords where appropriate
+- Structure content with proper heading hierarchy (H1, H2, H3) that includes keywords
+- DO NOT include a "Meta Description" section in the content - the description in the front matter will be used for this purpose
+- DO NOT include a "Keywords" section at the end of the content - the tags in the front matter will be used for this purpose
+`;
+    }
+
     const prompt = `
 Write a comprehensive, engaging, and informative blog post about "${topic}".
 
-The blog post should:
-- Have a catchy title
+IMPORTANT: Start the blog post with YAML front matter at the very beginning of the document. There should be no text before the front matter. The front matter should look like this:
+
+---
+title: "Your catchy title here"
+date: ${new Date().toISOString().split('T')[0]}
+description: "A brief description of the blog post that includes the primary keyword (this will be used as the meta description)"
+tags: [${keywords ? keywords.split(',').map(k => `"${k.trim()}"`).join(', ') : ''}]
+author: "AI Content Generator"
+---
+
+After the front matter, the blog post should:
+- Have a catchy title (H1 heading)
 - Include an introduction that hooks the reader
 - Contain at least 3-5 main sections with appropriate headings
 - Include relevant facts, examples, and insights
@@ -481,10 +517,13 @@ Format the blog post with proper Markdown syntax including:
 - - for bullet points
 - 1. for numbered lists
 
+IMPORTANT: DO NOT include a "Meta Description" or "Keywords" section at the end of the blog post. This information should ONLY be in the front matter.
+
 The blog post should be between 800-1200 words.
 ${newsArticlesText}
 ${redditPostsText}
 ${youtubeVideosText}
+${seoInstructionsText}
 `;
 
     // Save the prompt to a file
@@ -575,7 +614,7 @@ async function main() {
       throw new Error('GROQ_API_KEY is not set in .env file');
     }
 
-    const { topic, output, model, bing, tavily, reddit, youtube, subreddit } = argv;
+    const { topic, output, model, bing, tavily, reddit, youtube, subreddit, keywords } = argv;
 
     // Initialize Tavily if needed for news search
     if (tavily > 0) {
@@ -610,7 +649,7 @@ async function main() {
     saveResearchData(researchData, topic, output);
 
     // Generate blog content
-    const blogContent = await generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model);
+    const blogContent = await generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model, keywords);
 
     // Write to markdown file
     writeToMarkdownFile(blogContent, output);
