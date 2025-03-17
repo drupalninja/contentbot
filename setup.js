@@ -68,6 +68,13 @@ function checkDependencies() {
       console.log('Dependencies already installed.');
     }
 
+    // Ensure output directory exists
+    const outputDir = path.join(__dirname, 'output');
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+      console.log('Created output directory for blog posts.');
+    }
+
     showUsage();
   }
   catch (error) {
@@ -87,7 +94,7 @@ function showUsage() {
   console.log('  npm run create-blog -- --topic "Your Topic Here"');
   console.log('');
   console.log('Advanced options:');
-  console.log('  node create-blog.js --topic "Your Topic" --output "./custom-path.md" --model "llama3-8b-8192" --news 5');
+  console.log('  node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --model "llama3-8b-8192" --news 3');
   console.log('');
   console.log('For more information, see the README.md file.');
   console.log('');
@@ -101,10 +108,10 @@ function showUsage() {
 
         console.log(`Generating a test blog post about "${topic}"...`);
         try {
-          execSync(`node create-blog.js --topic "${topic}" --output "./test-blog.md" --news 2`, { stdio: 'inherit' });
+          execSync(`node create-blog.js --topic "${topic}" --output "./output/test-blog.md" --news 2`, { stdio: 'inherit' });
           console.log('');
           console.log('Test blog post generated successfully!');
-          console.log('You can find it at ./test-blog.md');
+          console.log('You can find it at ./output/test-blog.md');
         }
         catch (error) {
           console.error('Error generating test blog post:', error.message);

@@ -8,6 +8,7 @@ A Node.js script that generates blog content using Groq AI, with the ability to 
 - Automatically fetch and incorporate relevant news articles from Bing News
 - Format output in Markdown with proper headings, lists, and emphasis
 - Customize the AI model used for generation
+- Save all generated content to the output directory
 
 ## Installation
 
@@ -40,18 +41,18 @@ Alternatively, you can set up manually:
 npm run create-blog -- --topic "Your Topic Here"
 ```
 
-This will generate a blog post about your topic and save it to `./blog-post.md`.
+This will generate a blog post about your topic and save it to `./output/blog-post.md`.
 
 ### Advanced Options
 
 ```bash
-node create-blog.js --topic "Your Topic" --output "./custom-path.md" --model "llama3-8b-8192" --news 5
+node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --model "llama3-8b-8192" --news 3
 ```
 
 #### Options:
 
 - `--topic`, `-t`: Topic for the blog post (required)
-- `--output`, `-o`: Output file path (default: `./blog-post.md`)
+- `--output`, `-o`: Output file path (default: `./output/blog-post.md`)
 - `--model`, `-m`: Groq model to use (default: `llama3-70b-8192`)
 - `--news`, `-n`: Number of news articles to fetch (0-5, default: 3)
 - `--help`, `-h`: Show help
@@ -72,6 +73,15 @@ Generate a blog post about cryptocurrency using a different model:
 ```bash
 npm run create-blog -- --topic "Cryptocurrency Trends" --model "llama3-8b-8192"
 ```
+
+## Output Directory
+
+All generated blog posts are saved to the `./output/` directory by default. You can specify a different output path using the `--output` option.
+
+## Requirements
+
+- Node.js 14 or higher
+- A Groq API key
 
 ## License
 
