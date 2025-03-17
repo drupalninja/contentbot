@@ -98,13 +98,27 @@ const argv = yargs(hideBin(process.argv))
     default: 5
   })
   .option('subreddit', {
-    alias: 's',
-    description: 'Specific subreddit to search in (optional)',
+    description: 'Specific subreddit to search in',
     type: 'string'
+  })
+  .option('substack', {
+    description: 'Number of Substack posts to fetch (0-5)',
+    type: 'number',
+    default: 0
+  })
+  .option('publication', {
+    description: 'Specific Substack publication to fetch from (required if substack > 0)',
+    type: 'string'
+  })
+  .option('substackSort', {
+    description: 'Sort method for Substack posts (recent, top, oldest)',
+    type: 'string',
+    default: 'recent',
+    choices: ['recent', 'top', 'oldest']
   })
   .option('keywords', {
     alias: 'k',
-    description: 'SEO keywords to target (comma-separated)',
+    description: 'SEO keywords (comma-separated)',
     type: 'string'
   })
   .help()
@@ -357,6 +371,67 @@ async function fetchYouTubeVideos(topic, count = 0) {
 }
 
 /**
+ * Fetch Substack posts using the scrape-substack.js script
+ * @param {string} topic - The topic to search for
+ * @param {number} count - Number of posts to fetch
+ * @param {string} publication - Specific publication to fetch from (optional)
+ * @param {string} sort - Sort method (recent, top, oldest)
+ * @returns {Promise<Array>} - Array of Substack posts
+ */
+async function fetchSubstackPosts(topic, count = 0, publication = null, sort = 'recent') {
+  if (count <= 0) {
+    return [];
+  }
+
+  try {
+    // Create a temporary file to store the posts
+    const tempFile = path.join(__dirname, 'temp-substack-posts.json');
+
+    // Build the command
+    let command = `node scrape-substack.js --query "${topic}" --max ${count} --output "${tempFile}" --sort ${sort}`;
+
+    // Add discover flag if no publication is specified
+    if (!publication) {
+      command += ` --discover`;
+      console.log(`Discovering and fetching ${count} Substack posts about "${topic}" sorted by ${sort}...`);
+    } else {
+      command += ` --publication "${publication}"`;
+      console.log(`Fetching ${count} Substack posts about "${topic}" from "${publication}" sorted by ${sort}...`);
+    }
+
+    // Run the scrape-substack.js script
+    execSync(command, {
+      stdio: 'inherit'
+    });
+
+    // Check if the file exists
+    if (!fs.existsSync(tempFile)) {
+      console.log('No Substack posts were scraped. Continuing without Substack posts.');
+      return [];
+    }
+
+    // Read the posts from the file
+    const postsData = fs.readFileSync(tempFile, 'utf8');
+    const posts = JSON.parse(postsData);
+
+    // Delete the temporary file
+    fs.unlinkSync(tempFile);
+
+    if (posts.length === 0) {
+      console.log('No Substack posts were found. Continuing without Substack posts.');
+      return [];
+    }
+
+    console.log(`Successfully fetched ${posts.length} Substack posts.`);
+    return posts;
+  } catch (error) {
+    console.error('Error fetching Substack posts:', error.message);
+    console.log('Continuing without Substack posts.');
+    return [];
+  }
+}
+
+/**
  * Save prompt to a text file
  * @param {string} prompt - The prompt sent to the model
  * @param {string} topic - The research topic
@@ -398,11 +473,12 @@ ${prompt}`;
  * @param {Array} newsArticles - Array of news articles
  * @param {Array} redditPosts - Array of Reddit posts
  * @param {Array} youtubeVideos - Array of YouTube videos
+ * @param {Array} substackPosts - Array of Substack posts
  * @param {string} model - The Groq model to use
  * @param {string} keywords - SEO keywords to target (comma-separated)
  * @returns {Promise<string>} - The generated blog content
  */
-async function generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model, keywords) {
+async function generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, substackPosts, model, keywords) {
   try {
     console.log(`Generating blog post about "${topic}" using ${model}...`);
 
@@ -465,6 +541,26 @@ Please incorporate insights, perspectives, or discussions from these YouTube vid
 `;
     }
 
+    let substackPostsText = '';
+    if (substackPosts.length > 0) {
+      substackPostsText = `
+Here are some recent Substack articles related to this topic that you should incorporate into the blog post:
+
+${substackPosts.map((post, index) => `
+Substack Article ${index + 1}:
+Title: ${post.title}
+Author: ${post.author}
+Publication: ${post.publication}
+Subtitle: ${post.subtitle}
+Description: ${post.description ? post.description.substring(0, 500) + (post.description.length > 500 ? '...' : '') : 'No description available'}
+Date: ${post.date}
+URL: ${post.url}
+`).join('\n')}
+
+Please incorporate insights, analysis, or expert opinions from these Substack articles into your blog post to make it more comprehensive and authoritative. You can quote these articles directly (with attribution) or summarize the key points. Don't just list the articles, but integrate them naturally into your content.
+`;
+    }
+
     let seoInstructionsText = '';
     if (keywords) {
       const keywordsList = keywords.split(',').map(k => k.trim());
@@ -523,6 +619,7 @@ The blog post should be between 800-1200 words.
 ${newsArticlesText}
 ${redditPostsText}
 ${youtubeVideosText}
+${substackPostsText}
 ${seoInstructionsText}
 `;
 
@@ -614,7 +711,12 @@ async function main() {
       throw new Error('GROQ_API_KEY is not set in .env file');
     }
 
-    const { topic, output, model, bing, tavily, reddit, youtube, subreddit, keywords } = argv;
+    const { topic, output, model, bing, tavily, reddit, youtube, subreddit, substack, publication, substackSort, keywords } = argv;
+
+    // Validate Substack parameters - publication is now optional
+    // if (substack > 0 && !publication) {
+    //   throw new Error('The --publication parameter is required when using --substack. Please specify a Substack publication name (e.g., --publication "thegeneralist").');
+    // }
 
     // Initialize Tavily if needed for news search
     if (tavily > 0) {
@@ -624,7 +726,7 @@ async function main() {
     console.log('Starting research tasks in parallel...');
 
     // Run all research tasks in parallel
-    const [newsArticles, redditPosts, youtubeVideos] = await Promise.all([
+    const [newsArticles, redditPosts, youtubeVideos, substackPosts] = await Promise.all([
       // Fetch news articles if requested (either Bing or Tavily or both)
       (bing > 0 || tavily > 0) ? fetchNewsArticles(topic, bing, tavily) : Promise.resolve([]),
 
@@ -633,23 +735,28 @@ async function main() {
 
       // Fetch YouTube videos if requested
       youtube > 0 ? fetchYouTubeVideos(topic, youtube) : Promise.resolve([]),
+
+      // Fetch Substack posts if requested
+      substack > 0 ? fetchSubstackPosts(topic, substack, publication, substackSort) : Promise.resolve([]),
     ]);
 
     console.log('\nResearch completed:');
     console.log(`- News articles: ${newsArticles.length}`);
     console.log(`- Reddit posts: ${redditPosts.length}`);
-    console.log(`- YouTube videos: ${youtubeVideos.length}\n`);
+    console.log(`- YouTube videos: ${youtubeVideos.length}`);
+    console.log(`- Substack articles: ${substackPosts.length}\n`);
 
     // Save raw research data
     const researchData = {
       newsArticles,
       redditPosts,
-      youtubeVideos
+      youtubeVideos,
+      substackPosts
     };
     saveResearchData(researchData, topic, output);
 
     // Generate blog content
-    const blogContent = await generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model, keywords);
+    const blogContent = await generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, substackPosts, model, keywords);
 
     // Write to markdown file
     writeToMarkdownFile(blogContent, output);

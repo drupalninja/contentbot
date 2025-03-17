@@ -9,7 +9,8 @@
     "generate-topics": "node generate-topics.js",
     "setup": "node setup.js",
     "scrape-reddit": "node scrape-reddit.js",
-    "scrape-youtube": "node scrape-youtube.js"
+    "scrape-youtube": "node scrape-youtube.js",
+    "scrape-substack": "node scrape-substack.js"
   },
   "keywords": [
     "blog",
