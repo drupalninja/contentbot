@@ -7,6 +7,7 @@ const { Groq } = require('groq-sdk');
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
 const https = require('https');
+const { execSync } = require('child_process');
 
 // Initialize Groq client
 const groq = new Groq({
@@ -38,6 +39,17 @@ const argv = yargs(hideBin(process.argv))
     description: 'Number of news articles to fetch (0-5)',
     type: 'number',
     default: 3
+  })
+  .option('reddit', {
+    alias: 'r',
+    description: 'Number of Reddit posts to fetch (0-10)',
+    type: 'number',
+    default: 0
+  })
+  .option('subreddit', {
+    alias: 's',
+    description: 'Specific subreddit to search in (optional)',
+    type: 'string'
   })
   .help()
   .alias('help', 'h')
@@ -104,13 +116,72 @@ async function fetchNewsArticles(topic, count = 3) {
 }
 
 /**
+ * Fetch Reddit posts using the scrape-reddit.js script
+ * @param {string} topic - The topic to search for
+ * @param {number} count - Number of posts to fetch
+ * @param {string} subreddit - Specific subreddit to search in (optional)
+ * @returns {Promise<Array>} - Array of Reddit posts
+ */
+async function fetchRedditPosts(topic, count = 0, subreddit = null) {
+  if (count <= 0) {
+    return [];
+  }
+
+  try {
+    console.log(`Fetching ${count} Reddit posts about "${topic}"...`);
+
+    // Create a temporary file to store the posts
+    const tempFile = path.join(__dirname, 'temp-reddit-posts.json');
+
+    // Build the command
+    let command = `node scrape-reddit.js --query "${topic}" --max ${count} --output "${tempFile}"`;
+
+    // Add subreddit if specified
+    if (subreddit) {
+      command += ` --subreddit "${subreddit}"`;
+    }
+
+    // Run the scrape-reddit.js script
+    execSync(command, {
+      stdio: 'inherit'
+    });
+
+    // Check if the file exists
+    if (!fs.existsSync(tempFile)) {
+      console.log('No Reddit posts were scraped. Continuing without Reddit posts.');
+      return [];
+    }
+
+    // Read the posts from the file
+    const postsData = fs.readFileSync(tempFile, 'utf8');
+    const posts = JSON.parse(postsData);
+
+    // Delete the temporary file
+    fs.unlinkSync(tempFile);
+
+    if (posts.length === 0) {
+      console.log('No Reddit posts were found. Continuing without Reddit posts.');
+      return [];
+    }
+
+    console.log(`Successfully fetched ${posts.length} Reddit posts.`);
+    return posts;
+  } catch (error) {
+    console.error('Error fetching Reddit posts:', error.message);
+    console.log('Continuing without Reddit posts.');
+    return [];
+  }
+}
+
+/**
  * Generate blog content using Groq API
  * @param {string} topic - The topic for the blog post
  * @param {Array} newsArticles - Array of news articles
+ * @param {Array} redditPosts - Array of Reddit posts
  * @param {string} model - The Groq model to use
  * @returns {Promise<string>} - The generated blog content
  */
-async function generateBlogContent(topic, newsArticles, model) {
+async function generateBlogContent(topic, newsArticles, redditPosts, model) {
   try {
     console.log(`Generating blog post about "${topic}" using ${model}...`);
 
@@ -128,6 +199,27 @@ Link: ${article.link}
 `).join('\n')}
 
 Please incorporate insights, facts, or perspectives from these articles into your blog post, citing them where appropriate.
+`;
+    }
+
+    let redditPostsText = '';
+    if (redditPosts.length > 0) {
+      redditPostsText = `
+Here are some recent Reddit posts related to this topic that you should incorporate into the blog post:
+
+${redditPosts.map((post, index) => `
+Reddit Post ${index + 1}:
+Title: ${post.title}
+Author: ${post.author}
+Subreddit: ${post.subreddit}
+Content: ${post.text.substring(0, 500)}${post.text.length > 500 ? '...' : ''}
+Score: ${post.score} upvotes
+Comments: ${post.num_comments}
+Date: ${post.created_utc}
+URL: ${post.url}
+`).join('\n')}
+
+Please incorporate insights, perspectives, or discussions from these Reddit posts into your blog post to make it more engaging and connected to current conversations. You can quote these posts directly (with attribution) or summarize the key points. Don't just list the posts, but integrate them naturally into your content.
 `;
     }
 
@@ -155,6 +247,7 @@ Format the blog post with proper Markdown syntax including:
 
 The blog post should be between 800-1200 words.
 ${newsArticlesText}
+${redditPostsText}
 `;
 
     const completion = await groq.chat.completions.create({
@@ -205,13 +298,16 @@ async function main() {
       throw new Error('GROQ_API_KEY is not set in .env file');
     }
 
-    const { topic, output, model, news } = argv;
+    const { topic, output, model, news, reddit, subreddit } = argv;
 
     // Fetch news articles
     const newsArticles = await fetchNewsArticles(topic, news);
 
+    // Fetch Reddit posts
+    const redditPosts = await fetchRedditPosts(topic, reddit, subreddit);
+
     // Generate blog content
-    const blogContent = await generateBlogContent(topic, newsArticles, model);
+    const blogContent = await generateBlogContent(topic, newsArticles, redditPosts, model);
 
     // Write to markdown file
     writeToMarkdownFile(blogContent, output);

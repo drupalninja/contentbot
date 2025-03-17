@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "create-blog": "node create-blog.js",
-    "setup": "node setup.js"
+    "setup": "node setup.js",
+    "scrape-reddit": "node scrape-reddit.js"
   },
   "keywords": [
     "blog",
