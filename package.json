@@ -1,0 +1,25 @@
+{
+  "name": "contentbot",
+  "version": "1.0.0",
+  "description": "A Node.js script that generates blog content using Groq SDK",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "create-blog": "node create-blog.js",
+    "setup": "node setup.js"
+  },
+  "keywords": [
+    "blog",
+    "content",
+    "generation",
+    "groq",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "groq-sdk": "^0.15.0",
+    "dotenv": "^16.3.1",
+    "yargs": "^17.7.2"
+  }
+}
