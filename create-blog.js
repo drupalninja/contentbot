@@ -371,7 +371,7 @@ function writeToMarkdownFile(content, outputPath) {
 }
 
 /**
- * Main function to run the script
+ * Main function to run the script.
  */
 async function main() {
   try {
@@ -381,14 +381,24 @@ async function main() {
 
     const { topic, output, model, news, reddit, youtube, subreddit } = argv;
 
-    // Fetch news articles
-    const newsArticles = await fetchNewsArticles(topic, news);
+    console.log('Starting research tasks in parallel...');
 
-    // Fetch Reddit posts
-    const redditPosts = await fetchRedditPosts(topic, reddit, subreddit);
+    // Run all research tasks in parallel
+    const [newsArticles, redditPosts, youtubeVideos] = await Promise.all([
+      // Fetch news articles if requested
+      news > 0 ? fetchNewsArticles(topic, news) : Promise.resolve([]),
 
-    // Fetch YouTube videos
-    const youtubeVideos = await fetchYouTubeVideos(topic, youtube);
+      // Fetch Reddit posts if requested
+      reddit > 0 ? fetchRedditPosts(topic, reddit, subreddit) : Promise.resolve([]),
+
+      // Fetch YouTube videos if requested
+      youtube > 0 ? fetchYouTubeVideos(topic, youtube) : Promise.resolve([]),
+    ]);
+
+    console.log('\nResearch completed:');
+    console.log(`- News articles: ${newsArticles.length}`);
+    console.log(`- Reddit posts: ${redditPosts.length}`);
+    console.log(`- YouTube videos: ${youtubeVideos.length}\n`);
 
     // Generate blog content
     const blogContent = await generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model);
