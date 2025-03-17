@@ -491,6 +491,43 @@ function writeToMarkdownFile(content, outputPath) {
 }
 
 /**
+ * Save raw research data to a JSON file
+ * @param {Object} researchData - Object containing all research data
+ * @param {string} topic - The research topic
+ * @param {string} outputPath - The path to write the research data file
+ */
+function saveResearchData(researchData, topic, outputPath) {
+  try {
+    // Create research directory path
+    const researchDir = path.join(path.dirname(outputPath), 'research');
+
+    // Create the research directory if it doesn't exist
+    if (!fs.existsSync(researchDir)) {
+      fs.mkdirSync(researchDir, { recursive: true });
+    }
+
+    // Get the base filename from the output path and create research filename
+    const baseFilename = path.basename(outputPath, '.md');
+    const researchFilename = `${baseFilename}-research.json`;
+    const researchOutputPath = path.join(researchDir, researchFilename);
+
+    // Add metadata to the research data
+    const researchOutput = {
+      topic,
+      timestamp: new Date().toISOString(),
+      ...researchData
+    };
+
+    // Write the research data to the file
+    fs.writeFileSync(researchOutputPath, JSON.stringify(researchOutput, null, 2));
+    console.log(`Raw research data saved to ${researchOutputPath}`);
+  } catch (error) {
+    console.error('Error saving research data:', error.message);
+    throw error;
+  }
+}
+
+/**
  * Main function to run the script.
  */
 async function main() {
@@ -524,6 +561,14 @@ async function main() {
     console.log(`- News articles: ${newsArticles.length}`);
     console.log(`- Reddit posts: ${redditPosts.length}`);
     console.log(`- YouTube videos: ${youtubeVideos.length}\n`);
+
+    // Save raw research data
+    const researchData = {
+      newsArticles,
+      redditPosts,
+      youtubeVideos
+    };
+    saveResearchData(researchData, topic, output);
 
     // Generate blog content
     const blogContent = await generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model);
