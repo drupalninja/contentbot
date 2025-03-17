@@ -5,7 +5,9 @@ A Node.js script that generates blog content using Groq AI, with the ability to 
 ## Features
 
 - Generate comprehensive, engaging blog posts on any topic
-- Automatically fetch and incorporate relevant news articles from Bing News
+- Automatically fetch and incorporate relevant news articles from multiple sources:
+  - Bing News
+  - Tavily Search API
 - Scrape and integrate Reddit posts related to your topic
 - Scrape and integrate YouTube videos related to your topic
 - Format output in Markdown with proper headings, lists, and emphasis
@@ -33,9 +35,11 @@ Alternatively, you can set up manually:
    ```
    GROQ_API_KEY=your_groq_api_key_here
    YOUTUBE_API_KEY=your_youtube_api_key_here
+   TAVILY_API_KEY=your_tavily_api_key_here
    ```
    Get your Groq API key from [https://console.groq.com/keys](https://console.groq.com/keys)
    Get your YouTube API key from [https://console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
+   Get your Tavily API key from [https://tavily.com/](https://tavily.com/)
 
 ## Usage
 
@@ -50,7 +54,7 @@ This will generate a blog post about your topic and save it to `./output/blog-po
 ### Advanced Options
 
 ```bash
-node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --model "llama3-8b-8192" --news 3 --reddit 5 --youtube 3 --subreddit "technology"
+node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --model "llama3-8b-8192" --bing 3 --tavily 2 --reddit 5 --youtube 3 --subreddit "technology"
 ```
 
 #### Options:
@@ -58,7 +62,8 @@ node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --mo
 - `--topic`, `-t`: Topic for the blog post (required)
 - `--output`, `-o`: Output file path (default: `./output/blog-post.md`)
 - `--model`, `-m`: Groq model to use (default: `llama3-70b-8192`)
-- `--news`, `-n`: Number of news articles to fetch (0-5, default: 3)
+- `--bing`, `-b`: Number of Bing news articles to fetch (0-5, default: 3)
+- `--tavily`: Number of Tavily search results to fetch (0-5, default: 0)
 - `--reddit`, `-r`: Number of Reddit posts to fetch (0-10, default: 0)
 - `--youtube`, `-y`: Number of YouTube videos to fetch (0-5, default: 0)
 - `--subreddit`, `-s`: Specific subreddit to search in (optional)
@@ -66,19 +71,19 @@ node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --mo
 
 ## Examples
 
-Generate a blog post about AI ethics with 3 news articles, 5 Reddit posts, and 3 YouTube videos:
+Generate a blog post about AI ethics with Bing news, Tavily search, Reddit posts, and YouTube videos:
 ```bash
-npm run create-blog -- --topic "Artificial Intelligence Ethics" --news 3 --reddit 5 --youtube 3
+npm run create-blog -- --topic "Artificial Intelligence Ethics" --bing 2 --tavily 2 --reddit 5 --youtube 3
 ```
 
-Generate a blog post about climate change with only Reddit posts from the "environment" subreddit and 2 YouTube videos:
+Generate a blog post about climate change with only Tavily search results and Reddit posts from the "environment" subreddit:
 ```bash
-npm run create-blog -- --topic "Climate Change" --news 0 --reddit 7 --youtube 2 --subreddit "environment"
+npm run create-blog -- --topic "Climate Change" --bing 0 --tavily 3 --reddit 7 --youtube 0 --subreddit "environment"
 ```
 
 Generate a blog post about cryptocurrency using a different model:
 ```bash
-npm run create-blog -- --topic "Cryptocurrency Trends" --model "llama3-8b-8192" --reddit 3 --youtube 2
+npm run create-blog -- --topic "Cryptocurrency Trends" --model "llama3-8b-8192" --bing 2 --reddit 3 --youtube 2
 ```
 
 ## Scraping Reddit Posts Separately

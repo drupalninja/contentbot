@@ -14,6 +14,46 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+// Initialize Tavily client if API key is available
+let tavilyInitialized = false;
+let tavilyClient = null;
+
+// Function to initialize Tavily
+async function initTavily() {
+  if (!process.env.TAVILY_API_KEY || tavilyInitialized) {
+    return;
+  }
+
+  try {
+    const tavilyModule = await import('tavily');
+
+    // Based on the output, we know the module has TavilyClient and tavily properties
+    if (tavilyModule.TavilyClient) {
+      tavilyClient = new tavilyModule.TavilyClient({
+        apiKey: process.env.TAVILY_API_KEY,
+      });
+      tavilyInitialized = true;
+      console.log('Tavily API initialized successfully (TavilyClient).');
+    } else if (tavilyModule.tavily) {
+      tavilyClient = new tavilyModule.tavily({
+        apiKey: process.env.TAVILY_API_KEY,
+      });
+      tavilyInitialized = true;
+      console.log('Tavily API initialized successfully (tavily).');
+    } else if (tavilyModule.default) {
+      tavilyClient = new tavilyModule.default({
+        apiKey: process.env.TAVILY_API_KEY,
+      });
+      tavilyInitialized = true;
+      console.log('Tavily API initialized successfully (default).');
+    } else {
+      console.error('Failed to initialize Tavily API: Unsupported module structure', Object.keys(tavilyModule));
+    }
+  } catch (error) {
+    console.error('Failed to initialize Tavily API:', error.message);
+  }
+}
+
 // Parse command line arguments
 const argv = yargs(hideBin(process.argv))
   .option('topic', {
@@ -34,11 +74,16 @@ const argv = yargs(hideBin(process.argv))
     type: 'string',
     default: 'llama3-70b-8192'
   })
-  .option('news', {
-    alias: 'n',
-    description: 'Number of news articles to fetch (0-5)',
+  .option('bing', {
+    alias: 'b',
+    description: 'Number of Bing news articles to fetch (0-5)',
     type: 'number',
     default: 3
+  })
+  .option('tavily', {
+    description: 'Number of Tavily search results to fetch (0-5)',
+    type: 'number',
+    default: 0
   })
   .option('reddit', {
     alias: 'r',
@@ -62,18 +107,18 @@ const argv = yargs(hideBin(process.argv))
   .argv;
 
 /**
- * Fetch news articles related to a topic
+ * Fetch news articles related to a topic using Bing News
  * @param {string} topic - The topic to search for
  * @param {number} count - Number of articles to fetch
  * @returns {Promise<Array>} - Array of news articles
  */
-async function fetchNewsArticles(topic, count = 3) {
+async function fetchBingNewsArticles(topic, count = 3) {
   if (count <= 0) {
     return [];
   }
 
   count = Math.min(count, 5); // Limit to 5 articles max
-  console.log(`Fetching ${count} news articles about "${topic}"...`);
+  console.log(`Fetching ${count} news articles from Bing about "${topic}"...`);
 
   return new Promise((resolve, reject) => {
     const encodedTopic = encodeURIComponent(topic);
@@ -103,22 +148,97 @@ async function fetchNewsArticles(topic, count = 3) {
               title,
               link,
               description,
-              pubDate
+              pubDate,
+              source: 'Bing News'
             });
           }
 
-          console.log(`Found ${articles.length} news articles.`);
+          console.log(`Found ${articles.length} news articles from Bing.`);
           resolve(articles);
         } catch (error) {
-          console.error('Error parsing news articles:', error.message);
+          console.error('Error parsing Bing news articles:', error.message);
           resolve([]); // Return empty array on error
         }
       });
     }).on('error', (error) => {
-      console.error('Error fetching news articles:', error.message);
+      console.error('Error fetching Bing news articles:', error.message);
       resolve([]); // Return empty array on error
     });
   });
+}
+
+/**
+ * Fetch news articles related to a topic using Tavily
+ * @param {string} topic - The topic to search for
+ * @param {number} count - Number of articles to fetch
+ * @returns {Promise<Array>} - Array of news articles
+ */
+async function fetchTavilyNewsArticles(topic, count = 3) {
+  if (count <= 0 || !tavilyClient) {
+    return [];
+  }
+
+  count = Math.min(count, 5); // Limit to 5 articles max
+  console.log(`Fetching ${count} news articles from Tavily about "${topic}"...`);
+
+  try {
+    const response = await tavilyClient.search({
+      query: `latest news about ${topic}`,
+      search_depth: "advanced",
+      include_domains: ["news.google.com", "cnn.com", "bbc.com", "reuters.com", "bloomberg.com", "nytimes.com", "wsj.com", "theguardian.com", "apnews.com", "npr.org"],
+      max_results: count,
+      include_answer: false,
+      include_raw_content: false,
+    });
+
+    if (response && response.results && response.results.length > 0) {
+      const articles = response.results.map(result => ({
+        title: result.title || 'No title available',
+        link: result.url,
+        description: result.content || result.snippet || 'No description available',
+        pubDate: new Date().toISOString(), // Tavily doesn't provide dates, use current date
+        source: 'Tavily Search'
+      }));
+
+      console.log(`Found ${articles.length} news articles from Tavily.`);
+      return articles;
+    } else {
+      console.log('No news articles found from Tavily.');
+      return [];
+    }
+  } catch (error) {
+    console.error('Error fetching Tavily news articles:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Fetch news articles related to a topic using multiple sources
+ * @param {string} topic - The topic to search for
+ * @param {number} bingCount - Number of Bing news articles to fetch
+ * @param {number} tavilyCount - Number of Tavily search results to fetch
+ * @returns {Promise<Array>} - Array of news articles
+ */
+async function fetchNewsArticles(topic, bingCount = 3, tavilyCount = 0) {
+  const allArticles = [];
+
+  // Fetch from Bing if requested
+  if (bingCount > 0) {
+    const bingArticles = await fetchBingNewsArticles(topic, bingCount);
+    allArticles.push(...bingArticles);
+    console.log(`Added ${bingArticles.length} articles from Bing.`);
+  }
+
+  // Fetch from Tavily if requested and available
+  if (tavilyCount > 0 && tavilyClient) {
+    const tavilyArticles = await fetchTavilyNewsArticles(topic, tavilyCount);
+    allArticles.push(...tavilyArticles);
+    console.log(`Added ${tavilyArticles.length} articles from Tavily.`);
+  } else if (tavilyCount > 0 && !tavilyClient) {
+    console.log('Tavily API is not available. To enable Tavily search, add TAVILY_API_KEY to your .env file.');
+  }
+
+  return allArticles;
 }
 
 /**
@@ -379,14 +499,19 @@ async function main() {
       throw new Error('GROQ_API_KEY is not set in .env file');
     }
 
-    const { topic, output, model, news, reddit, youtube, subreddit } = argv;
+    const { topic, output, model, bing, tavily, reddit, youtube, subreddit } = argv;
+
+    // Initialize Tavily if needed for news search
+    if (tavily > 0) {
+      await initTavily();
+    }
 
     console.log('Starting research tasks in parallel...');
 
     // Run all research tasks in parallel
     const [newsArticles, redditPosts, youtubeVideos] = await Promise.all([
-      // Fetch news articles if requested
-      news > 0 ? fetchNewsArticles(topic, news) : Promise.resolve([]),
+      // Fetch news articles if requested (either Bing or Tavily or both)
+      (bing > 0 || tavily > 0) ? fetchNewsArticles(topic, bing, tavily) : Promise.resolve([]),
 
       // Fetch Reddit posts if requested
       reddit > 0 ? fetchRedditPosts(topic, reddit, subreddit) : Promise.resolve([]),

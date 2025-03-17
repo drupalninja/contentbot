@@ -5,10 +5,16 @@ const path = require('path');
 const readline = require('readline');
 const { execSync } = require('child_process');
 
+// Create readline interface
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
 });
+
+// API key flags
+let groqKeySet = false;
+let youtubeKeySet = false;
+let tavilyKeySet = false;
 
 console.log('='.repeat(50));
 console.log('ContentBot Setup');
@@ -17,42 +23,97 @@ console.log('This script will help you set up ContentBot for generating blog pos
 console.log('');
 
 // Check if .env file exists
-const envExists = fs.existsSync(path.join(__dirname, '.env'));
+if (fs.existsSync('.env')) {
+  console.log('Found existing .env file.');
 
-if (envExists) {
-  console.log('An .env file already exists. Do you want to overwrite it? (y/n)');
-  rl.question('> ', (answer) => {
-    if (answer.toLowerCase() === 'y') {
-      createEnvFile();
+  // Read existing .env file
+  const envContent = fs.readFileSync('.env', 'utf8');
+
+  // Check if GROQ_API_KEY is already set
+  if (envContent.includes('GROQ_API_KEY=') && !envContent.includes('GROQ_API_KEY=your_groq_api_key_here') && !envContent.includes('GROQ_API_KEY=')) {
+    console.log('GROQ_API_KEY is already set in .env file.');
+    groqKeySet = true;
+  }
+
+  // Check if YOUTUBE_API_KEY is already set
+  if (envContent.includes('YOUTUBE_API_KEY=') && !envContent.includes('YOUTUBE_API_KEY=your_youtube_api_key_here') && !envContent.includes('YOUTUBE_API_KEY=')) {
+    console.log('YOUTUBE_API_KEY is already set in .env file.');
+    youtubeKeySet = true;
+  }
+
+  // Check if TAVILY_API_KEY is already set
+  if (envContent.includes('TAVILY_API_KEY=') && !envContent.includes('TAVILY_API_KEY=your_tavily_api_key_here') && !envContent.includes('TAVILY_API_KEY=')) {
+    console.log('TAVILY_API_KEY is already set in .env file.');
+    tavilyKeySet = true;
+  }
+}
+
+// Prompt for GROQ API key if not set
+if (!groqKeySet) {
+  rl.question('Enter your Groq API key (get one from https://console.groq.com/keys): ', (apiKey) => {
+    if (apiKey) {
+      // Write API key to .env file
+      fs.writeFileSync('.env', `GROQ_API_KEY=${apiKey}\n`, { flag: 'w' });
+      console.log('GROQ API key saved to .env file.');
+
+      // Prompt for YouTube API key
+      promptForYouTubeKey();
     }
     else {
-      console.log('Skipping .env file creation.');
-      checkDependencies();
+      console.log('No API key provided. You will need to add it manually to the .env file.');
+      promptForYouTubeKey();
     }
   });
 }
 else {
-  createEnvFile();
+  promptForYouTubeKey();
 }
 
-function createEnvFile() {
-  rl.question('Enter your Groq API key (get one at https://console.groq.com/keys): ', (apiKey) => {
-    if (!apiKey) {
-      console.log('No API key provided. You can add it later to the .env file.');
-      apiKey = 'your_api_key_here';
-    }
+// Prompt for YouTube API key if not set
+function promptForYouTubeKey() {
+  if (!youtubeKeySet) {
+    rl.question('Enter your YouTube API key (optional, get one from https://console.cloud.google.com/apis/credentials): ', (apiKey) => {
+      if (apiKey) {
+        // Append YouTube API key to .env file
+        fs.appendFileSync('.env', `YOUTUBE_API_KEY=${apiKey}\n`);
+        console.log('YouTube API key saved to .env file.');
+      }
+      else {
+        console.log('No YouTube API key provided. YouTube scraping will not be available.');
+      }
 
-    const envContent = `# Groq API Key - Get yours at https://console.groq.com/keys
-GROQ_API_KEY=${apiKey}`;
-
-    fs.writeFileSync(path.join(__dirname, '.env'), envContent);
-    console.log('Created .env file with your API key.');
-
-    checkDependencies();
-  });
+      // Prompt for Tavily API key
+      promptForTavilyKey();
+    });
+  }
+  else {
+    promptForTavilyKey();
+  }
 }
 
-function checkDependencies() {
+// Prompt for Tavily API key if not set
+function promptForTavilyKey() {
+  if (!tavilyKeySet) {
+    rl.question('Enter your Tavily API key (optional, get one from https://tavily.com/): ', (apiKey) => {
+      if (apiKey) {
+        // Append Tavily API key to .env file
+        fs.appendFileSync('.env', `TAVILY_API_KEY=${apiKey}\n`);
+        console.log('Tavily API key saved to .env file.');
+      }
+      else {
+        console.log('No Tavily API key provided. Tavily search will not be available as a fallback for news.');
+      }
+
+      // Continue with setup
+      installDependencies();
+    });
+  }
+  else {
+    installDependencies();
+  }
+}
+
+function installDependencies() {
   console.log('Checking dependencies...');
 
   try {
@@ -94,10 +155,13 @@ function showUsage() {
   console.log('  npm run create-blog -- --topic "Your Topic Here"');
   console.log('');
   console.log('Advanced options:');
-  console.log('  node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --model "llama3-8b-8192" --news 3 --reddit 5 --subreddit "technology"');
+  console.log('  node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --model "llama3-8b-8192" --bing 3 --tavily 2 --reddit 5 --youtube 2 --subreddit "technology"');
   console.log('');
   console.log('Reddit scraping:');
   console.log('  npm run scrape-reddit -- --query "Your Search Query" --max 10 --subreddit "technology"');
+  console.log('');
+  console.log('YouTube scraping:');
+  console.log('  npm run scrape-youtube -- --query "Your Search Query" --max 5');
   console.log('');
   console.log('For more information, see the README.md file.');
   console.log('');
@@ -114,7 +178,7 @@ function showUsage() {
 
           console.log(`Generating a test blog post about "${topic}"...`);
           try {
-            execSync(`node create-blog.js --topic "${topic}" --output "./output/test-blog.md" --news 2 ${redditOption}`, { stdio: 'inherit' });
+            execSync(`node create-blog.js --topic "${topic}" --output "./output/test-blog.md" --bing 2 ${redditOption}`, { stdio: 'inherit' });
             console.log('');
             console.log('Test blog post generated successfully!');
             console.log('You can find it at ./output/test-blog.md');
