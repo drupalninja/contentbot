@@ -352,6 +352,42 @@ async function fetchYouTubeVideos(topic, count = 0) {
 }
 
 /**
+ * Save prompt to a text file
+ * @param {string} prompt - The prompt sent to the model
+ * @param {string} topic - The research topic
+ * @param {string} outputPath - The path to write the blog post file
+ */
+function savePrompt(prompt, topic, outputPath) {
+  try {
+    // Create prompts directory path
+    const promptsDir = path.join(path.dirname(outputPath), 'prompts');
+
+    // Create the prompts directory if it doesn't exist
+    if (!fs.existsSync(promptsDir)) {
+      fs.mkdirSync(promptsDir, { recursive: true });
+    }
+
+    // Get the base filename from the output path and create prompt filename
+    const baseFilename = path.basename(outputPath, '.md');
+    const promptFilename = `${baseFilename}-prompt.txt`;
+    const promptOutputPath = path.join(promptsDir, promptFilename);
+
+    // Add metadata to the prompt
+    const promptOutput = `Topic: ${topic}
+Timestamp: ${new Date().toISOString()}
+
+${prompt}`;
+
+    // Write the prompt to the file
+    fs.writeFileSync(promptOutputPath, promptOutput);
+    console.log(`Prompt saved to ${promptOutputPath}`);
+  } catch (error) {
+    console.error('Error saving prompt:', error.message);
+    throw error;
+  }
+}
+
+/**
  * Generate blog content using Groq API
  * @param {string} topic - The topic for the blog post
  * @param {Array} newsArticles - Array of news articles
@@ -450,6 +486,9 @@ ${newsArticlesText}
 ${redditPostsText}
 ${youtubeVideosText}
 `;
+
+    // Save the prompt to a file
+    savePrompt(prompt, topic, argv.output);
 
     const completion = await groq.chat.completions.create({
       messages: [
