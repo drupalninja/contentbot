@@ -10,7 +10,8 @@
     "setup": "node setup.js",
     "scrape-youtube": "node scrape-youtube.js",
     "scrape-bing": "node scrape-bing.js",
-    "scrape-tavily": "node scrape-tavily.js"
+    "scrape-tavily": "node scrape-tavily.js",
+    "scrape-reddit": "node scrape-reddit.js"
   },
   "keywords": [
     "blog",

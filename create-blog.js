@@ -44,6 +44,12 @@ const argv = yargs(hideBin(process.argv))
     type: 'number',
     default: 5
   })
+  .option('reddit', {
+    alias: 'r',
+    description: 'Number of Reddit posts to fetch (0-10)',
+    type: 'number',
+    default: 5
+  })
   .option('youtube', {
     alias: 'y',
     description: 'Number of YouTube videos to fetch (0-5)',
@@ -145,6 +151,58 @@ async function fetchNewsArticles(topic, bingCount = 3, tavilyCount = 0) {
 }
 
 /**
+ * Fetch Reddit posts using the scrape-reddit.js script
+ * @param {string} topic - The topic to search for
+ * @param {number} count - Number of posts to fetch
+ * @returns {Promise<Array>} - Array of Reddit posts
+ */
+async function fetchRedditPosts(topic, count = 0) {
+  if (count <= 0) {
+    return [];
+  }
+
+  try {
+    console.log(`Fetching ${count} Reddit posts about "${topic}"...`);
+
+    // Create a temporary file to store the posts
+    const tempFile = path.join(__dirname, 'temp-reddit-posts.json');
+
+    // Build the command
+    const command = `node scrape-reddit.js --query "${topic}" --max ${count} --output "${tempFile}"`;
+
+    // Run the scrape-reddit.js script
+    execSync(command, {
+      stdio: 'inherit'
+    });
+
+    // Check if the file exists
+    if (!fs.existsSync(tempFile)) {
+      console.log('No Reddit posts were scraped. Continuing without Reddit posts.');
+      return [];
+    }
+
+    // Read the posts from the file
+    const postsData = fs.readFileSync(tempFile, 'utf8');
+    const posts = JSON.parse(postsData);
+
+    // Delete the temporary file
+    fs.unlinkSync(tempFile);
+
+    if (posts.length === 0) {
+      console.log('No Reddit posts were found. Continuing without Reddit posts.');
+      return [];
+    }
+
+    console.log(`Found ${posts.length} Reddit posts.`);
+    return posts;
+  } catch (error) {
+    console.error('Error fetching Reddit posts:', error.message);
+    console.log('Continuing without Reddit posts.');
+    return [];
+  }
+}
+
+/**
  * Fetch YouTube videos using the scrape-youtube.js script
  * @param {string} topic - The topic to search for
  * @param {number} count - Number of videos to fetch
@@ -238,12 +296,13 @@ ${prompt}`;
  * Generate blog content using Groq API
  * @param {string} topic - The topic for the blog post
  * @param {Array} newsArticles - Array of news articles
+ * @param {Array} redditPosts - Array of Reddit posts
  * @param {Array} youtubeVideos - Array of YouTube videos
  * @param {string} model - The Groq model to use
  * @param {string} keywords - SEO keywords to target (comma-separated)
  * @returns {Promise<string>} - The generated blog content
  */
-async function generateBlogContent(topic, newsArticles, youtubeVideos, model, keywords) {
+async function generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model, keywords) {
   try {
     console.log(`Generating blog post about "${topic}" using ${model}...`);
 
@@ -261,6 +320,25 @@ Link: ${article.link}
 `).join('\n')}
 
 Please incorporate insights, facts, or perspectives from these articles into your blog post, citing them where appropriate.
+`;
+    }
+
+    let redditPostsText = '';
+    if (redditPosts.length > 0) {
+      redditPostsText = `
+Here are some relevant Reddit posts related to this topic that you should incorporate into the blog post:
+
+${redditPosts.map((post, index) => `
+Reddit Post ${index + 1}:
+Title: ${post.title}
+Subreddit: r/${post.subreddit}
+Author: u/${post.author}
+Upvotes: ${post.upvotes}
+Content: ${post.content.substring(0, 500)}${post.content.length > 500 ? '...' : ''}
+URL: ${post.url}
+`).join('\n')}
+
+Please incorporate discussions, opinions, or insights from these Reddit posts into your blog post where appropriate. These represent community perspectives and can add a sense of public opinion to your article.
 `;
     }
 
@@ -315,6 +393,9 @@ SEO guidelines:
       else if (source.platform === 'YouTube') {
         sourceText = `Source ${sourceNumber} (YouTube video): ${source.title}\nBy ${source.author || source.channelTitle}\n${source.description}`;
       }
+      else if (source.platform === 'Reddit') {
+        sourceText = `Source ${sourceNumber} (Reddit post): ${source.title}\nFrom r/${source.subreddit} by u/${source.author}\n${source.content}`;
+      }
       else {
         sourceText = `Source ${sourceNumber}: ${source.title}\n${source.content || source.text || source.description}`;
       }
@@ -323,7 +404,7 @@ SEO guidelines:
     };
 
     // Build all sources array for proper numbering
-    const sources = [...newsArticles, ...youtubeVideos];
+    const sources = [...newsArticles, ...redditPosts, ...youtubeVideos];
 
     // Define sources text with the sources array
     let sourcesText = '';
@@ -465,14 +546,17 @@ async function main() {
       throw new Error('GROQ_API_KEY is not set in .env file');
     }
 
-    const { topic, output, model, bing, tavily, youtube, keywords } = argv;
+    const { topic, output, model, bing, tavily, reddit, youtube, keywords } = argv;
 
     console.log('Starting research tasks in parallel...');
 
     // Run all research tasks in parallel
-    const [newsArticles, youtubeVideos] = await Promise.all([
+    const [newsArticles, redditPosts, youtubeVideos] = await Promise.all([
       // Fetch news articles if requested (either Bing or Tavily or both)
       (bing > 0 || tavily > 0) ? fetchNewsArticles(topic, bing, tavily) : Promise.resolve([]),
+
+      // Fetch Reddit posts if requested
+      reddit > 0 ? fetchRedditPosts(topic, reddit) : Promise.resolve([]),
 
       // Fetch YouTube videos if requested
       youtube > 0 ? fetchYouTubeVideos(topic, youtube) : Promise.resolve([]),
@@ -480,17 +564,19 @@ async function main() {
 
     console.log('\nResearch completed:');
     console.log(`- News articles: ${newsArticles.length}`);
+    console.log(`- Reddit posts: ${redditPosts.length}`);
     console.log(`- YouTube videos: ${youtubeVideos.length}`);
 
     // Save raw research data
     const researchData = {
       newsArticles,
+      redditPosts,
       youtubeVideos,
     };
     saveResearchData(researchData, topic, output);
 
     // Generate blog content
-    const blogContent = await generateBlogContent(topic, newsArticles, youtubeVideos, model, keywords);
+    const blogContent = await generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model, keywords);
 
     // Write to markdown file
     writeToMarkdownFile(blogContent, output);

@@ -172,7 +172,7 @@ function writeVideosToFile(videos, outputPath) {
 
     // Write the videos to the file
     fs.writeFileSync(outputPath, JSON.stringify(videos, null, 2));
-    console.log(`YouTube videos saved to: ${outputPath}`);
+    console.log(`YouTube videos saved to: temp-youtube-videos.json`);
   } catch (error) {
     console.error('Error writing to file:', error.message);
     throw error;
