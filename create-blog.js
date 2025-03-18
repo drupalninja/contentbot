@@ -386,18 +386,19 @@ SEO guidelines:
     const formatForPrompt = (source, index) => {
       const sourceNumber = index + 1;
       let sourceText = '';
+      let directUrl = source.link || source.url || '';
 
       if (source.platform === 'News') {
-        sourceText = `Source ${sourceNumber} (${source.source || 'News article'}): ${source.title}\n${source.content || source.text || source.description}`;
+        sourceText = `Source ${sourceNumber} (${source.source || 'News article'}): ${source.title}\nDirect URL: ${directUrl}\n${source.content || source.text || source.description}`;
       }
       else if (source.platform === 'YouTube') {
-        sourceText = `Source ${sourceNumber} (YouTube video): ${source.title}\nBy ${source.author || source.channelTitle}\n${source.description}`;
+        sourceText = `Source ${sourceNumber} (YouTube video): ${source.title}\nBy ${source.author || source.channelTitle}\nDirect URL: ${directUrl}\n${source.description}`;
       }
       else if (source.platform === 'Reddit') {
-        sourceText = `Source ${sourceNumber} (Reddit post): ${source.title}\nFrom r/${source.subreddit} by u/${source.author}\n${source.content}`;
+        sourceText = `Source ${sourceNumber} (Reddit post): ${source.title}\nFrom r/${source.subreddit} by u/${source.author}\nDirect URL: ${directUrl}\n${source.content}`;
       }
       else {
-        sourceText = `Source ${sourceNumber}: ${source.title}\n${source.content || source.text || source.description}`;
+        sourceText = `Source ${sourceNumber}: ${source.title}\nDirect URL: ${directUrl}\n${source.content || source.text || source.description}`;
       }
 
       return `[${sourceNumber}] ${sourceText}\n\n`;
@@ -448,16 +449,15 @@ Format the blog post with proper Markdown syntax including:
 
 VERY IMPORTANT: You MUST cite sources when using information from them. Use the format [X] where X is the source number. For example, "According to a recent study [3]..." or "As mentioned in a recent article [5]...". Every major fact or quote should have a citation.
 
-IMPORTANT: At the end of the blog post, after the conclusion, include a "## References" section that lists all the sources you cited. Each reference MUST include both the title AND the complete URL exactly as provided in the source information:
+IMPORTANT: At the end of the blog post, after the conclusion, include a "## References" section that lists all the sources you cited. Use the EXACT TITLE and DIRECT URL from each source:
 
 ## References
 
-[1] "Actual Title of the First Source". https://full-actual-url-of-first-source-exactly-as-provided
-[2] "Actual Title of the Second Source". https://full-actual-url-of-second-source-exactly-as-provided
+[1] "EXACT TITLE FROM SOURCE 1". DIRECT_URL_FROM_SOURCE_1
 
-You MUST use the exact URLs from the source information provided.
-If a URL starts with https://, include the full URL.
-DO NOT abbreviate or omit any parts of the URLs.
+[2] "EXACT TITLE FROM SOURCE 2". DIRECT_URL_FROM_SOURCE_2
+
+Add a blank line between each reference for proper spacing.
 
 The blog post should be between 800-1200 words (not including references).
 
