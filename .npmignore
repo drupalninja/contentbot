@@ -6,7 +6,6 @@
 node_modules/
 
 # Examples and tests
-examples/
 test/
 __tests__/
 

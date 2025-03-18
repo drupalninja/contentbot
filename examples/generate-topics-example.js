@@ -1,13 +1,16 @@
 require('dotenv').config();
 const path = require('path');
-
-// Import the generateTopics function directly from the module
-const contentBot = require('../lib/index.js');
+const ContentBot = require('../lib/index.js');
 
 async function main() {
   try {
-    // Define the parameters exactly as they would be in the CLI version
-    const params = {
+    // Create a new ContentBot instance
+    const bot = new ContentBot({
+      model: 'llama3-70b-8192',
+    });
+
+    // Define the parameters
+    const options = {
       category: 'Dallas Mavericks',
       count: 3,
       audience: 'business owners',
@@ -16,21 +19,13 @@ async function main() {
       keywords: [],
       bingCount: 5,
       tavilyCount: 5,
-      researchMode: 'enhanced'
+      researchMode: 'basic',
     };
 
+    console.log(`Generating ${options.count} topic ideas for ${options.category} targeting ${options.audience}...`);
+
     // Generate topics using the ContentBot class
-    const bot = new contentBot();
-    const result = await bot.generateTopics(params.category, {
-      count: params.count,
-      audience: params.audience,
-      outputPath: params.outputPath,
-      model: params.model,
-      keywords: params.keywords,
-      bingCount: params.bingCount,
-      tavilyCount: params.tavilyCount,
-      researchMode: params.researchMode
-    });
+    const result = await bot.generateTopics(options.category, options);
 
     // Log the results
     console.log('\nGenerated Topics:');

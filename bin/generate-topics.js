@@ -268,9 +268,10 @@ function saveResearchData(researchData, category, outputPath) {
  * @param {string} model - The Groq model to use
  * @param {string|Array} keywords - Keywords to include in topics (comma-separated string or array)
  * @param {Object} additionalResearch - Additional research data
+ * @param {string} outputPath - Optional path to save the prompt
  * @returns {Promise<string>} - The generated topics content
  */
-async function generateTopicIdeas(category, newsArticles, count, audience, model, keywords, additionalResearch = {}) {
+async function generateTopicIdeas(category, newsArticles, count, audience, model, keywords, additionalResearch = {}, outputPath = null) {
   try {
     console.log(`Generating ${count} topic ideas for "${category}" category using ${model}...`);
 
@@ -396,8 +397,10 @@ IMPORTANT:
 9. Verify your response is valid JSON before returning it
 `;
 
-    // Save the prompt to a file
-    savePrompt(prompt, category, argv.output);
+    // Save the prompt to a file if outputPath is provided
+    if (outputPath) {
+      savePrompt(prompt, category, outputPath);
+    }
 
     // Generate completion with Groq
     const completion = await groq.chat.completions.create({
@@ -591,7 +594,8 @@ async function generateTopics(category, count = 10, audience = 'general', output
       audience,
       model,
       keywords,
-      { redditPosts, youtubeVideos }
+      { redditPosts, youtubeVideos },
+      outputPath
     );
 
     // Parse the JSON string to get the object
