@@ -48,58 +48,6 @@ async function initTavily() {
   }
 }
 
-// Parse command line arguments
-const argv = yargs(hideBin(process.argv))
-  .option('category', {
-    alias: 'c',
-    description: 'Category for topic generation (e.g., technology, health, finance)',
-    type: 'string',
-    demandOption: true
-  })
-  .option('count', {
-    alias: 'n',
-    description: 'Number of topics to generate',
-    type: 'number',
-    default: 5
-  })
-  .option('output', {
-    alias: 'o',
-    description: 'Output file path',
-    type: 'string',
-    default: './output/topic-ideas.json'
-  })
-  .option('model', {
-    alias: 'm',
-    description: 'Groq model to use',
-    type: 'string',
-    default: 'llama3-70b-8192'
-  })
-  .option('bing', {
-    alias: 'b',
-    description: 'Number of Bing news articles to fetch (0-5)',
-    type: 'number',
-    default: 3
-  })
-  .option('tavily', {
-    description: 'Number of Tavily search results to fetch (0-5)',
-    type: 'number',
-    default: 3
-  })
-  .option('audience', {
-    alias: 'a',
-    description: 'Target audience for the topics (e.g., beginners, professionals, general)',
-    type: 'string',
-    default: 'general'
-  })
-  .option('keywords', {
-    alias: 'k',
-    description: 'Keywords to include in topics (comma-separated)',
-    type: 'string'
-  })
-  .help()
-  .alias('help', 'h')
-  .argv;
-
 /**
  * Fetch news articles related to a topic using Bing News
  * @param {string} topic - The topic to search for
@@ -593,14 +541,11 @@ async function generateTopics(category, count = 10, audience = 'general', output
     // Fetch news articles for research
     const newsArticles = await fetchNewsArticles(category, bingCount, tavilyCount);
 
-    // Try to import additional research modules if in enhanced mode and not in CLI mode
+    // Try to import additional research modules if in enhanced mode
     let redditPosts = [];
     let youtubeVideos = [];
 
-    // Check if we're running in CLI mode or programmatically
-    const isCliMode = require.main === module;
-
-    if (researchMode === 'enhanced' && !isCliMode) {
+    if (researchMode === 'enhanced') {
       try {
         // Try to load the Reddit scraping function
         const redditModule = require('./scrape-reddit');
@@ -670,22 +615,77 @@ async function generateTopics(category, count = 10, audience = 'general', output
 
 // Command line interface handler
 async function main() {
-  const argv = yargs(hideBin(process.argv))
-    // ... existing CLI configuration ...
-    .argv;
+  // Only parse command line arguments when running as CLI
+  if (require.main === module) {
+    const argv = yargs(hideBin(process.argv))
+      .option('category', {
+        alias: 'c',
+        description: 'Category for topic generation (e.g., technology, health, finance)',
+        type: 'string',
+        demandOption: true
+      })
+      .option('count', {
+        alias: 'n',
+        description: 'Number of topics to generate',
+        type: 'number',
+        default: 5
+      })
+      .option('output', {
+        alias: 'o',
+        description: 'Output file path',
+        type: 'string',
+        default: './output/topic-ideas.json'
+      })
+      .option('model', {
+        alias: 'm',
+        description: 'Groq model to use',
+        type: 'string',
+        default: 'llama3-70b-8192'
+      })
+      .option('bing', {
+        alias: 'b',
+        description: 'Number of Bing news articles to fetch (0-5)',
+        type: 'number',
+        default: 3
+      })
+      .option('tavily', {
+        description: 'Number of Tavily search results to fetch (0-5)',
+        type: 'number',
+        default: 3
+      })
+      .option('audience', {
+        alias: 'a',
+        description: 'Target audience for the topics (e.g., beginners, professionals, general)',
+        type: 'string',
+        default: 'general'
+      })
+      .option('keywords', {
+        alias: 'k',
+        description: 'Keywords to include in topics (comma-separated)',
+        type: 'string'
+      })
+      .help()
+      .alias('help', 'h')
+      .argv;
 
-  try {
-    await generateTopics(
-      argv.category,
-      argv.count,
-      argv.audience,
-      argv.output,
-      argv.model,
-      argv.keywords
-    );
-  } catch (error) {
-    console.error('Error:', error.message);
-    process.exit(1);
+    try {
+      await generateTopics(
+        argv.category,
+        argv.count,
+        argv.audience,
+        argv.output,
+        argv.model,
+        argv.keywords,
+        {
+          bingCount: argv.bing,
+          tavilyCount: argv.tavily,
+          researchMode: 'enhanced'
+        }
+      );
+    } catch (error) {
+      console.error('Error:', error.message);
+      process.exit(1);
+    }
   }
 }
 
