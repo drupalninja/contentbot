@@ -20,37 +20,31 @@ let tavilyClient = null;
 
 // Function to initialize Tavily
 async function initTavily() {
-  if (!process.env.TAVILY_API_KEY || tavilyInitialized) {
-    return;
+  if (!process.env.TAVILY_API_KEY) {
+    console.log('TAVILY_API_KEY is not set in .env file.');
+    return false;
+  }
+
+  if (tavilyInitialized && tavilyClient) {
+    return true;
   }
 
   try {
-    const tavilyModule = await import('tavily');
+    const { TavilyClient } = await import('tavily');
 
-    // Based on the output, we know the module has TavilyClient and tavily properties
-    if (tavilyModule.TavilyClient) {
-      tavilyClient = new tavilyModule.TavilyClient({
+    if (TavilyClient) {
+      tavilyClient = new TavilyClient({
         apiKey: process.env.TAVILY_API_KEY,
       });
       tavilyInitialized = true;
-      console.log('Tavily API initialized successfully (TavilyClient).');
-    } else if (tavilyModule.tavily) {
-      tavilyClient = new tavilyModule.tavily({
-        apiKey: process.env.TAVILY_API_KEY,
-      });
-      tavilyInitialized = true;
-      console.log('Tavily API initialized successfully (tavily).');
-    } else if (tavilyModule.default) {
-      tavilyClient = new tavilyModule.default({
-        apiKey: process.env.TAVILY_API_KEY,
-      });
-      tavilyInitialized = true;
-      console.log('Tavily API initialized successfully (default).');
-    } else {
-      console.error('Failed to initialize Tavily API: Unsupported module structure', Object.keys(tavilyModule));
+      return true;
     }
+
+    console.error('Failed to initialize Tavily API: TavilyClient not found');
+    return false;
   } catch (error) {
     console.error('Failed to initialize Tavily API:', error.message);
+    return false;
   }
 }
 
@@ -230,12 +224,15 @@ async function fetchNewsArticles(topic, bingCount = 3, tavilyCount = 0) {
   }
 
   // Fetch from Tavily if requested and available
-  if (tavilyCount > 0 && tavilyClient) {
-    const tavilyArticles = await fetchTavilyNewsArticles(topic, tavilyCount);
-    allArticles.push(...tavilyArticles);
-    console.log(`Added ${tavilyArticles.length} articles from Tavily.`);
-  } else if (tavilyCount > 0 && !tavilyClient) {
-    console.log('Tavily API is not available. To enable Tavily search, add TAVILY_API_KEY to your .env file.');
+  if (tavilyCount > 0) {
+    const tavilyInitialized = await initTavily();
+    if (tavilyInitialized) {
+      const tavilyArticles = await fetchTavilyNewsArticles(topic, tavilyCount);
+      allArticles.push(...tavilyArticles);
+      console.log(`Added ${tavilyArticles.length} articles from Tavily.`);
+    } else {
+      console.log('Tavily API initialization failed. To enable Tavily search, ensure TAVILY_API_KEY is correct in your .env file.');
+    }
   }
 
   return allArticles;
@@ -321,7 +318,7 @@ function saveResearchData(researchData, category, outputPath) {
  * @param {number} count - Number of topics to generate
  * @param {string} audience - Target audience for the topics
  * @param {string} model - The Groq model to use
- * @param {string} keywords - Keywords to include in topics (comma-separated)
+ * @param {string|Array} keywords - Keywords to include in topics (comma-separated string or array)
  * @param {Object} additionalResearch - Additional research data
  * @returns {Promise<string>} - The generated topics content
  */
@@ -389,12 +386,18 @@ Please use these YouTube videos to identify current trends, popular content form
 
     let keywordsText = '';
     if (keywords) {
-      const keywordsList = keywords.split(',').map(k => k.trim());
-      keywordsText = `
+      // Convert keywords to string if it's an array
+      const keywordsStr = Array.isArray(keywords) ? keywords.join(',') : String(keywords || '');
+
+      // Only process if we have a non-empty string
+      if (keywordsStr.trim()) {
+        const keywordsList = keywordsStr.split(',').map(k => k.trim());
+        keywordsText = `
 KEYWORDS TO INCLUDE:
 Try to incorporate some of these keywords into your topic ideas:
 ${keywordsList.map(keyword => `- "${keyword}"`).join('\n')}
 `;
+      }
     }
 
     const prompt = `
@@ -402,6 +405,8 @@ You are a specialized AI that ONLY outputs valid, parseable JSON.
 
 Your task is to generate ${count} unique and engaging blog topic ideas related to "${category}" for a ${audience} audience.
 Your topic ideas MUST be based on the CURRENT and UP-TO-DATE information I've provided about this subject.
+
+VERY IMPORTANT: Only include factually accurate and up-to-date information in your topics. For specialized subjects (like sports teams, companies, or technology), make sure any specific entities you mention (e.g., players, products, executives) are actually current and relevant. If you're unsure about specific details, focus on broader concepts instead.
 
 For each topic idea, include:
 - A catchy, SEO-friendly title
@@ -433,13 +438,14 @@ ${keywordsText}
 
 IMPORTANT:
 1. Make topics CURRENT and UP-TO-DATE - avoid suggesting outdated information
-2. Make topics specific, actionable, and based on current trends
-3. Focus on unique angles and innovative approaches
-4. Your response MUST only contain the JSON object - no markdown, no explanations, no extra text
-5. Ensure all JSON keys and string values are properly double-quoted
-6. Do not use single quotes in your JSON
-7. Do not include comments in the JSON
-8. Verify your response is valid JSON before returning it
+2. Check the accuracy of specific entities mentioned (people, products, teams, etc.)
+3. Make topics specific, actionable, and based on current trends
+4. Focus on unique angles and innovative approaches
+5. Your response MUST only contain the JSON object - no markdown, no explanations, no extra text
+6. Ensure all JSON keys and string values are properly double-quoted
+7. Do not use single quotes in your JSON
+8. Do not include comments in the JSON
+9. Verify your response is valid JSON before returning it
 `;
 
     // Save the prompt to a file
@@ -482,16 +488,45 @@ IMPORTANT:
       console.error('Error parsing JSON from API response:', error.message);
       console.log('Raw content received:', content);
 
-      // Return a fallback JSON with error information
-      return JSON.stringify({
-        category,
-        audience,
-        generatedAt: new Date().toISOString().split('T')[0],
-        topics: [],
-        rawContent: content,
-        error: `Failed to parse JSON: ${error.message}`,
-        additionalResearch: additionalResearch
-      }, null, 2);
+      // Try to fix common JSON formatting errors - this is simplistic but handles some cases
+      let fixedContent = content;
+
+      // Case 1: Fix "styleTypeKeyword" to "targetKeyword" - spotted in the error
+      fixedContent = fixedContent.replace(/styleTypeKeyword":/g, 'targetKeyword":');
+
+      // Case 2: Fix other common errors
+      fixedContent = fixedContent.replace(/([,{]\s*)(\w+)(\s*:)/g, '$1"$2"$3'); // Add quotes to unquoted property keys
+
+      // Try parsing again
+      try {
+        const jsonData = JSON.parse(fixedContent);
+
+        // Ensure the expected structure is present
+        if (!jsonData.topics) jsonData.topics = [];
+        if (!jsonData.category) jsonData.category = category;
+        if (!jsonData.audience) jsonData.audience = audience;
+        if (!jsonData.generatedAt) jsonData.generatedAt = new Date().toISOString().split('T')[0];
+
+        // Add additional research data
+        jsonData.additionalResearch = additionalResearch;
+
+        console.log('Successfully fixed and parsed the JSON response!');
+        return JSON.stringify(jsonData, null, 2);
+      } catch (secondError) {
+        // If we still couldn't parse it, return the fallback with the error information
+        console.error('Failed to fix JSON:', secondError.message);
+
+        // Return a fallback JSON with error information
+        return JSON.stringify({
+          category,
+          audience,
+          generatedAt: new Date().toISOString().split('T')[0],
+          topics: [],
+          rawContent: content,
+          error: `Failed to parse JSON: ${error.message}`,
+          additionalResearch: additionalResearch
+        }, null, 2);
+      }
     }
   } catch (error) {
     console.error('Error generating topic ideas:', error.message);
@@ -558,11 +593,14 @@ async function generateTopics(category, count = 10, audience = 'general', output
     // Fetch news articles for research
     const newsArticles = await fetchNewsArticles(category, bingCount, tavilyCount);
 
-    // Try to import additional research modules if in enhanced mode
+    // Try to import additional research modules if in enhanced mode and not in CLI mode
     let redditPosts = [];
     let youtubeVideos = [];
 
-    if (researchMode === 'enhanced') {
+    // Check if we're running in CLI mode or programmatically
+    const isCliMode = require.main === module;
+
+    if (researchMode === 'enhanced' && !isCliMode) {
       try {
         // Try to load the Reddit scraping function
         const redditModule = require('./scrape-reddit');
