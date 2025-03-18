@@ -12,13 +12,3 @@ __tests__/
 
 # Output directory
 output/
-
-# Original scripts that are now in bin/
-create-blog.js
-scrape-bing.js
-scrape-tavily.js
-scrape-reddit.js
-scrape-youtube.js
-generate-topics.js
-setup.js
-index.js
