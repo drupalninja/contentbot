@@ -1,6 +1,6 @@
 {
   "name": "contentbot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A Node.js module that generates blog content using Groq SDK",
   "main": "lib/index.js",
   "bin": {
@@ -41,10 +41,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/contentbot.git"
+    "url": "git+https://github.com/drupalninja/contentbot.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/contentbot/issues"
+    "url": "https://github.com/drupalninja/contentbot/issues"
   },
-  "homepage": "https://github.com/yourusername/contentbot#readme"
+  "homepage": "https://github.com/drupalninja/contentbot#readme"
 }

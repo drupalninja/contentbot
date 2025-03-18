@@ -6,7 +6,7 @@ const { hideBin } = require('yargs/helpers');
 const ContentBot = require('../lib/index');
 
 // Parse command line arguments
-const argv = yargs(hideBin(process.argv))
+const yargsInstance = yargs(hideBin(process.argv))
   .command('create-blog', 'Create a blog post', (yargs) => {
     return yargs
       .option('topic', {
@@ -47,10 +47,11 @@ const argv = yargs(hideBin(process.argv))
     }
   })
   .command('$0', 'Default command - show help', () => { }, (argv) => {
-    yargs.showHelp();
+    yargsInstance.showHelp();
     console.log('\nRun one of the available commands:');
     console.log('  contentbot create-blog --topic "Your Topic"');
   })
   .help()
-  .alias('help', 'h')
-  .argv;
+  .alias('help', 'h');
+
+const argv = yargsInstance.argv;
