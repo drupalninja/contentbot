@@ -150,9 +150,9 @@ async function main() {
     fs.writeFileSync(output, JSON.stringify(articles, null, 2));
 
     if (articles.length > 0) {
-      console.log(`Successfully saved ${articles.length} news articles to ${output}`);
+      console.log(`Successfully saved ${articles.length} news articles to temp-tavily-articles.json`);
     } else {
-      console.log(`No articles found. Saved empty array to ${output}`);
+      console.log(`No articles found. Saved empty array to temp-tavily-articles.json`);
     }
   } catch (error) {
     console.error('Error:', error.message);

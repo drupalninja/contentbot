@@ -321,9 +321,9 @@ async function main() {
     fs.writeFileSync(output, JSON.stringify(posts, null, 2));
 
     if (posts.length > 0) {
-      console.log(`Successfully saved ${posts.length} Reddit posts to ${output}`);
+      console.log(`Successfully saved ${posts.length} Reddit posts to temp-reddit-posts.json`);
     } else {
-      console.log(`No Reddit posts found. Saved empty array to ${output}`);
+      console.log(`No Reddit posts found. Saved empty array to temp-reddit-posts.json`);
     }
   } catch (error) {
     console.error('Error:', error.message);
