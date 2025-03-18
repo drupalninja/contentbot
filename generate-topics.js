@@ -496,49 +496,74 @@ function writeToJsonFile(content, outputPath) {
   }
 }
 
-/**
- * Main function to run the script.
- */
-async function main() {
+// Main function to generate topics
+async function generateTopics(category, count = 10, audience = 'general', outputPath = './output/topics.json', model = 'llama3-70b-8192', keywords = []) {
   try {
-    if (!process.env.GROQ_API_KEY) {
-      throw new Error('GROQ_API_KEY is not set in .env file');
+    // Create output directory if it doesn't exist and outputPath is provided
+    if (outputPath) {
+      const outputDir = path.dirname(outputPath);
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
     }
 
-    const { category, count, output, model, bing, tavily, audience, keywords } = argv;
+    console.log(`Generating ${count} topic ideas for ${category} targeting ${audience}...`);
 
-    // Initialize Tavily if needed for news search
-    if (tavily > 0) {
-      await initTavily();
-    }
-
-    console.log('Starting research for topic ideas...');
-
-    // Fetch news articles for inspiration
-    const newsArticles = await fetchNewsArticles(category, bing, tavily);
-
-    console.log('\nResearch completed:');
-    console.log(`- News articles: ${newsArticles.length}\n`);
-
-    // Save raw research data
-    const researchData = {
-      newsArticles
-    };
-
-    // Update the output path to use .json extension
-    const jsonOutput = output.replace(/\.md$/, '.json');
-    saveResearchData(researchData, category, jsonOutput);
+    // Fetch news articles for research
+    const newsArticles = await fetchNewsArticles(category, 3, 2);
 
     // Generate topic ideas
     const topicIdeas = await generateTopicIdeas(category, newsArticles, count, audience, model, keywords);
 
-    // Write to JSON file
-    writeToJsonFile(topicIdeas, jsonOutput);
+    // Parse the JSON string to get the object
+    const topicsObject = JSON.parse(topicIdeas);
+
+    // Save the results to file if outputPath is provided
+    if (outputPath) {
+      writeToJsonFile(topicIdeas, outputPath);
+      console.log(`✅ Generated ${topicsObject.topics.length} topic ideas and saved to ${outputPath}`);
+    } else {
+      console.log(`✅ Generated ${topicsObject.topics.length} topic ideas`);
+    }
+
+    // Return the parsed object instead of the JSON string
+    return topicsObject;
+  } catch (error) {
+    console.error('Error generating topics:', error);
+    throw error;
+  }
+}
+
+// Command line interface handler
+async function main() {
+  const argv = yargs(hideBin(process.argv))
+    // ... existing CLI configuration ...
+    .argv;
+
+  try {
+    await generateTopics(
+      argv.category,
+      argv.count,
+      argv.audience,
+      argv.output,
+      argv.model,
+      argv.keywords
+    );
   } catch (error) {
     console.error('Error:', error.message);
     process.exit(1);
   }
 }
 
-// Run the script
-main();
+// Run the main function if this script is executed directly
+if (require.main === module) {
+  main();
+}
+
+// Export functions for programmatic use
+module.exports = {
+  generateTopics,
+  fetchNewsArticles,
+  generateTopicIdeas,
+  writeToJsonFile,
+};

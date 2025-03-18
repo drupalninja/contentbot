@@ -547,28 +547,44 @@ function saveResearchData(researchData, topic, outputPath) {
 }
 
 /**
- * Main function to run the script.
+ * Create a blog post with research about a topic
+ * @param {string} topic - The topic for the blog post
+ * @param {Object} options - Additional options
+ * @param {string} options.outputPath - The path to write the blog post to
+ * @param {string} options.model - The Groq model to use
+ * @param {number} options.bingCount - Number of Bing news articles to fetch
+ * @param {number} options.tavilyCount - Number of Tavily search results to fetch
+ * @param {number} options.redditCount - Number of Reddit posts to fetch
+ * @param {number} options.youtubeCount - Number of YouTube videos to fetch
+ * @param {string} options.keywords - SEO keywords to target (comma-separated)
+ * @returns {Promise<Object>} - Object containing the blog content and file path
  */
-async function main() {
+async function createBlog(topic, options = {}) {
   try {
     if (!process.env.GROQ_API_KEY) {
       throw new Error('GROQ_API_KEY is not set in .env file');
     }
 
-    const { topic, output, model, bing, tavily, reddit, youtube, keywords } = argv;
+    const outputPath = options.outputPath || './output/blog-post.md';
+    const model = options.model || 'llama3-70b-8192';
+    const bingCount = options.bingCount ?? 5;
+    const tavilyCount = options.tavilyCount ?? 5;
+    const redditCount = options.redditCount ?? 5;
+    const youtubeCount = options.youtubeCount ?? 5;
+    const keywords = options.keywords || '';
 
     console.log('Starting research tasks in parallel...');
 
     // Run all research tasks in parallel
     const [newsArticles, redditPosts, youtubeVideos] = await Promise.all([
       // Fetch news articles if requested (either Bing or Tavily or both)
-      (bing > 0 || tavily > 0) ? fetchNewsArticles(topic, bing, tavily) : Promise.resolve([]),
+      (bingCount > 0 || tavilyCount > 0) ? fetchNewsArticles(topic, bingCount, tavilyCount) : Promise.resolve([]),
 
       // Fetch Reddit posts if requested
-      reddit > 0 ? fetchRedditPosts(topic, reddit) : Promise.resolve([]),
+      redditCount > 0 ? fetchRedditPosts(topic, redditCount) : Promise.resolve([]),
 
       // Fetch YouTube videos if requested
-      youtube > 0 ? fetchYouTubeVideos(topic, youtube) : Promise.resolve([]),
+      youtubeCount > 0 ? fetchYouTubeVideos(topic, youtubeCount) : Promise.resolve([]),
     ]);
 
     console.log('\nResearch completed:');
@@ -582,18 +598,59 @@ async function main() {
       redditPosts,
       youtubeVideos,
     };
-    saveResearchData(researchData, topic, output);
+    saveResearchData(researchData, topic, outputPath);
 
     // Generate blog content
     const blogContent = await generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, model, keywords);
 
     // Write to markdown file
-    writeToMarkdownFile(blogContent, output);
+    writeToMarkdownFile(blogContent, outputPath);
+
+    return {
+      content: blogContent,
+      filePath: outputPath,
+      researchData,
+    };
+  } catch (error) {
+    console.error('Error creating blog:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Main function to run the script.
+ */
+async function main() {
+  try {
+    const { topic, output, model, bing, tavily, reddit, youtube, keywords } = argv;
+
+    await createBlog(topic, {
+      outputPath: output,
+      model,
+      bingCount: bing,
+      tavilyCount: tavily,
+      redditCount: reddit,
+      youtubeCount: youtube,
+      keywords,
+    });
   } catch (error) {
     console.error('Error:', error.message);
     process.exit(1);
   }
 }
 
-// Run the script
-main();
+// Run the script only if this file is executed directly
+if (require.main === module) {
+  main();
+}
+
+// Export functions for programmatic use
+module.exports = {
+  createBlog,
+  generateBlogContent,
+  fetchNewsArticles,
+  fetchRedditPosts,
+  fetchYouTubeVideos,
+  writeToMarkdownFile,
+  saveResearchData,
+};
