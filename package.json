@@ -1,17 +1,20 @@
 {
   "name": "contentbot",
   "version": "1.0.0",
-  "description": "A Node.js script that generates blog content using Groq SDK",
-  "main": "index.js",
+  "description": "A Node.js module that generates blog content using Groq SDK",
+  "main": "lib/index.js",
+  "bin": {
+    "contentbot": "bin/cli.js"
+  },
   "scripts": {
-    "start": "node index.js",
-    "create-blog": "node create-blog.js",
-    "generate-topics": "node generate-topics.js",
-    "setup": "node setup.js",
-    "scrape-youtube": "node scrape-youtube.js",
-    "scrape-bing": "node scrape-bing.js",
-    "scrape-tavily": "node scrape-tavily.js",
-    "scrape-reddit": "node scrape-reddit.js"
+    "start": "node bin/cli.js",
+    "create-blog": "node bin/create-blog.js",
+    "generate-topics": "node bin/generate-topics.js",
+    "setup": "node bin/setup.js",
+    "scrape-youtube": "node bin/scrape-youtube.js",
+    "scrape-bing": "node bin/scrape-bing.js",
+    "scrape-tavily": "node bin/scrape-tavily.js",
+    "scrape-reddit": "node bin/scrape-reddit.js"
   },
   "keywords": [
     "blog",
@@ -20,7 +23,7 @@
     "groq",
     "ai"
   ],
-  "author": "",
+  "author": "Jay Callicott",
   "license": "MIT",
   "dependencies": {
     "axios": "^1.8.3",
@@ -28,5 +31,20 @@
     "groq-sdk": "^0.15.0",
     "tavily": "^1.0.2",
     "yargs": "^17.7.2"
-  }
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "bin",
+    "lib"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/contentbot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/contentbot/issues"
+  },
+  "homepage": "https://github.com/yourusername/contentbot#readme"
 }
