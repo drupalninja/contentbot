@@ -85,36 +85,11 @@ const argv = yargs(hideBin(process.argv))
     type: 'number',
     default: 5
   })
-  .option('reddit', {
-    alias: 'r',
-    description: 'Number of Reddit posts to fetch (0-10)',
-    type: 'number',
-    default: 5
-  })
   .option('youtube', {
     alias: 'y',
     description: 'Number of YouTube videos to fetch (0-5)',
     type: 'number',
     default: 5
-  })
-  .option('subreddit', {
-    description: 'Specific subreddit to search in',
-    type: 'string'
-  })
-  .option('substack', {
-    description: 'Number of Substack posts to fetch (0-5)',
-    type: 'number',
-    default: 0
-  })
-  .option('publication', {
-    description: 'Specific Substack publication to fetch from (required if substack > 0)',
-    type: 'string'
-  })
-  .option('substackSort', {
-    description: 'Sort method for Substack posts (recent, top, oldest)',
-    type: 'string',
-    default: 'recent',
-    choices: ['recent', 'top', 'oldest']
   })
   .option('keywords', {
     alias: 'k',
@@ -143,8 +118,21 @@ async function fetchBingNewsArticles(topic, count = 3) {
     const encodedTopic = encodeURIComponent(topic);
     const url = `https://www.bing.com/news/search?q=${encodedTopic}&format=rss`;
 
-    https.get(url, (res) => {
+    const options = {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      }
+    };
+
+    https.get(url, options, (res) => {
       let data = '';
+
+      // Handle redirects and error status codes
+      if (res.statusCode !== 200) {
+        console.error(`Received status code ${res.statusCode} from Bing News API`);
+        resolve([]);
+        return;
+      }
 
       res.on('data', (chunk) => {
         data += chunk;
@@ -152,24 +140,59 @@ async function fetchBingNewsArticles(topic, count = 3) {
 
       res.on('end', () => {
         try {
-          // Extract articles from RSS feed
+          console.log(`Received ${data.length} bytes of data from Bing News`);
+
+          // First, check if we actually received RSS content
+          if (!data.includes('<rss') && !data.includes('<item>')) {
+            console.error('Response does not appear to be valid RSS content');
+            resolve([]);
+            return;
+          }
+
+          // Extract articles from RSS feed using a more robust regex
           const articles = [];
-          const regex = /<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>[\s\S]*?<description>(.*?)<\/description>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/g;
 
-          let match;
-          while ((match = regex.exec(data)) !== null && articles.length < count) {
-            const title = match[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1');
-            const link = match[2];
-            const description = match[3].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').replace(/<.*?>/g, '');
-            const pubDate = match[4];
+          // Two regex patterns to try
+          const regexPatterns = [
+            /<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>[\s\S]*?<description>(.*?)<\/description>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/g,
+            /<item>\s*<title>(.*?)<\/title>\s*<link>(.*?)<\/link>\s*<description>(.*?)<\/description>.*?<pubDate>(.*?)<\/pubDate>/gs
+          ];
 
-            articles.push({
-              title,
-              link,
-              description,
-              pubDate,
-              source: 'Bing News'
-            });
+          // Try both patterns
+          for (const pattern of regexPatterns) {
+            let match;
+            while ((match = pattern.exec(data)) !== null && articles.length < count) {
+              if (match[1] && match[2] && match[3] && match[4]) {
+                const title = match[1]
+                  .replace(/&quot;/g, '"')
+                  .replace(/&amp;/g, '&')
+                  .replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1');
+
+                const link = match[2]
+                  .replace(/&amp;/g, '&');
+
+                const description = match[3]
+                  .replace(/&quot;/g, '"')
+                  .replace(/&amp;/g, '&')
+                  .replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1')
+                  .replace(/<.*?>/g, '');
+
+                const pubDate = match[4];
+
+                articles.push({
+                  title,
+                  link,
+                  description,
+                  pubDate,
+                  source: 'Bing News'
+                });
+              }
+            }
+
+            // If we found articles with this pattern, stop trying
+            if (articles.length > 0) {
+              break;
+            }
           }
 
           console.log(`Found ${articles.length} news articles from Bing.`);
@@ -261,64 +284,6 @@ async function fetchNewsArticles(topic, bingCount = 3, tavilyCount = 0) {
 }
 
 /**
- * Fetch Reddit posts using the scrape-reddit.js script
- * @param {string} topic - The topic to search for
- * @param {number} count - Number of posts to fetch
- * @param {string} subreddit - Specific subreddit to search in (optional)
- * @returns {Promise<Array>} - Array of Reddit posts
- */
-async function fetchRedditPosts(topic, count = 0, subreddit = null) {
-  if (count <= 0) {
-    return [];
-  }
-
-  try {
-    console.log(`Fetching ${count} Reddit posts about "${topic}"...`);
-
-    // Create a temporary file to store the posts
-    const tempFile = path.join(__dirname, 'temp-reddit-posts.json');
-
-    // Build the command
-    let command = `node scrape-reddit.js --query "${topic}" --max ${count} --output "${tempFile}"`;
-
-    // Add subreddit if specified
-    if (subreddit) {
-      command += ` --subreddit "${subreddit}"`;
-    }
-
-    // Run the scrape-reddit.js script
-    execSync(command, {
-      stdio: 'inherit'
-    });
-
-    // Check if the file exists
-    if (!fs.existsSync(tempFile)) {
-      console.log('No Reddit posts were scraped. Continuing without Reddit posts.');
-      return [];
-    }
-
-    // Read the posts from the file
-    const postsData = fs.readFileSync(tempFile, 'utf8');
-    const posts = JSON.parse(postsData);
-
-    // Delete the temporary file
-    fs.unlinkSync(tempFile);
-
-    if (posts.length === 0) {
-      console.log('No Reddit posts were found. Continuing without Reddit posts.');
-      return [];
-    }
-
-    console.log(`Successfully fetched ${posts.length} Reddit posts.`);
-    return posts;
-  } catch (error) {
-    console.error('Error fetching Reddit posts:', error.message);
-    console.log('Continuing without Reddit posts.');
-    return [];
-  }
-}
-
-/**
  * Fetch YouTube videos using the scrape-youtube.js script
  * @param {string} topic - The topic to search for
  * @param {number} count - Number of videos to fetch
@@ -361,72 +326,13 @@ async function fetchYouTubeVideos(topic, count = 0) {
       return [];
     }
 
+    console.log(`Found ${videos.length} YouTube videos.`);
+    console.log(`YouTube videos saved to: temp-youtube-videos.json`);
     console.log(`Successfully fetched ${videos.length} YouTube videos.`);
     return videos;
   } catch (error) {
     console.error('Error fetching YouTube videos:', error.message);
     console.log('Continuing without YouTube videos.');
-    return [];
-  }
-}
-
-/**
- * Fetch Substack posts using the scrape-substack.js script
- * @param {string} topic - The topic to search for
- * @param {number} count - Number of posts to fetch
- * @param {string} publication - Specific publication to fetch from (optional)
- * @param {string} sort - Sort method (recent, top, oldest)
- * @returns {Promise<Array>} - Array of Substack posts
- */
-async function fetchSubstackPosts(topic, count = 0, publication = null, sort = 'recent') {
-  if (count <= 0) {
-    return [];
-  }
-
-  try {
-    // Create a temporary file to store the posts
-    const tempFile = path.join(__dirname, 'temp-substack-posts.json');
-
-    // Build the command
-    let command = `node scrape-substack.js --query "${topic}" --max ${count} --output "${tempFile}" --sort ${sort}`;
-
-    // Add discover flag if no publication is specified
-    if (!publication) {
-      command += ` --discover`;
-      console.log(`Discovering and fetching ${count} Substack posts about "${topic}" sorted by ${sort}...`);
-    } else {
-      command += ` --publication "${publication}"`;
-      console.log(`Fetching ${count} Substack posts about "${topic}" from "${publication}" sorted by ${sort}...`);
-    }
-
-    // Run the scrape-substack.js script
-    execSync(command, {
-      stdio: 'inherit'
-    });
-
-    // Check if the file exists
-    if (!fs.existsSync(tempFile)) {
-      console.log('No Substack posts were scraped. Continuing without Substack posts.');
-      return [];
-    }
-
-    // Read the posts from the file
-    const postsData = fs.readFileSync(tempFile, 'utf8');
-    const posts = JSON.parse(postsData);
-
-    // Delete the temporary file
-    fs.unlinkSync(tempFile);
-
-    if (posts.length === 0) {
-      console.log('No Substack posts were found. Continuing without Substack posts.');
-      return [];
-    }
-
-    console.log(`Successfully fetched ${posts.length} Substack posts.`);
-    return posts;
-  } catch (error) {
-    console.error('Error fetching Substack posts:', error.message);
-    console.log('Continuing without Substack posts.');
     return [];
   }
 }
@@ -471,14 +377,12 @@ ${prompt}`;
  * Generate blog content using Groq API
  * @param {string} topic - The topic for the blog post
  * @param {Array} newsArticles - Array of news articles
- * @param {Array} redditPosts - Array of Reddit posts
  * @param {Array} youtubeVideos - Array of YouTube videos
- * @param {Array} substackPosts - Array of Substack posts
  * @param {string} model - The Groq model to use
  * @param {string} keywords - SEO keywords to target (comma-separated)
  * @returns {Promise<string>} - The generated blog content
  */
-async function generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, substackPosts, model, keywords) {
+async function generateBlogContent(topic, newsArticles, youtubeVideos, model, keywords) {
   try {
     console.log(`Generating blog post about "${topic}" using ${model}...`);
 
@@ -496,27 +400,6 @@ Link: ${article.link}
 `).join('\n')}
 
 Please incorporate insights, facts, or perspectives from these articles into your blog post, citing them where appropriate.
-`;
-    }
-
-    let redditPostsText = '';
-    if (redditPosts.length > 0) {
-      redditPostsText = `
-Here are some recent Reddit posts related to this topic that you should incorporate into the blog post:
-
-${redditPosts.map((post, index) => `
-Reddit Post ${index + 1}:
-Title: ${post.title}
-Author: ${post.author}
-Subreddit: ${post.subreddit}
-Content: ${post.text.substring(0, 500)}${post.text.length > 500 ? '...' : ''}
-Score: ${post.score} upvotes
-Comments: ${post.num_comments}
-Date: ${post.created_utc}
-URL: ${post.url}
-`).join('\n')}
-
-Please incorporate insights, perspectives, or discussions from these Reddit posts into your blog post to make it more engaging and connected to current conversations. You can quote these posts directly (with attribution) or summarize the key points. Don't just list the posts, but integrate them naturally into your content.
 `;
     }
 
@@ -541,26 +424,6 @@ Please incorporate insights, perspectives, or discussions from these YouTube vid
 `;
     }
 
-    let substackPostsText = '';
-    if (substackPosts.length > 0) {
-      substackPostsText = `
-Here are some recent Substack articles related to this topic that you should incorporate into the blog post:
-
-${substackPosts.map((post, index) => `
-Substack Article ${index + 1}:
-Title: ${post.title}
-Author: ${post.author}
-Publication: ${post.publication}
-Subtitle: ${post.subtitle}
-Description: ${post.description ? post.description.substring(0, 500) + (post.description.length > 500 ? '...' : '') : 'No description available'}
-Date: ${post.date}
-URL: ${post.url}
-`).join('\n')}
-
-Please incorporate insights, analysis, or expert opinions from these Substack articles into your blog post to make it more comprehensive and authoritative. You can quote these articles directly (with attribution) or summarize the key points. Don't just list the articles, but integrate them naturally into your content.
-`;
-    }
-
     let seoInstructionsText = '';
     if (keywords) {
       const keywordsList = keywords.split(',').map(k => k.trim());
@@ -579,6 +442,34 @@ SEO guidelines:
 - DO NOT include a "Meta Description" section in the content - the description in the front matter will be used for this purpose
 - DO NOT include a "Keywords" section at the end of the content - the tags in the front matter will be used for this purpose
 `;
+    }
+
+    const formatForPrompt = (source, index) => {
+      const sourceNumber = index + 1;
+      let sourceText = '';
+
+      if (source.platform === 'News') {
+        sourceText = `Source ${sourceNumber} (${source.source || 'News article'}): ${source.title}\n${source.content || source.text}`;
+      }
+      else if (source.platform === 'YouTube') {
+        sourceText = `Source ${sourceNumber} (YouTube video): ${source.title}\nBy ${source.author}\n${source.description}`;
+      }
+      else {
+        sourceText = `Source ${sourceNumber}: ${source.title}\n${source.content || source.text}`;
+      }
+
+      return `[${sourceNumber}] ${sourceText}\n\n`;
+    };
+
+    // Build all sources array for proper numbering
+    const sources = [...newsArticles, ...youtubeVideos];
+
+    // Define sources text with the sources array
+    let sourcesText = '';
+    if (sources.length > 0) {
+      sourcesText = sources.map(formatForPrompt).join('');
+    } else {
+      sourcesText = "No sources found. Create content based on general knowledge about the topic.\n\n";
     }
 
     const prompt = `
@@ -613,13 +504,15 @@ Format the blog post with proper Markdown syntax including:
 - - for bullet points
 - 1. for numbered lists
 
+VERY IMPORTANT: You MUST cite sources when using information from them. Use the format [X] where X is the source number. For example, "According to a recent study [3]..." or "As mentioned in a recent article [5]...". Every major fact or quote should have a citation.
+
 IMPORTANT: DO NOT include a "Meta Description" or "Keywords" section at the end of the blog post. This information should ONLY be in the front matter.
 
 The blog post should be between 800-1200 words.
-${newsArticlesText}
-${redditPostsText}
-${youtubeVideosText}
-${substackPostsText}
+
+Here are your sources:
+
+${sourcesText}
 ${seoInstructionsText}
 `;
 
@@ -711,12 +604,7 @@ async function main() {
       throw new Error('GROQ_API_KEY is not set in .env file');
     }
 
-    const { topic, output, model, bing, tavily, reddit, youtube, subreddit, substack, publication, substackSort, keywords } = argv;
-
-    // Validate Substack parameters - publication is now optional
-    // if (substack > 0 && !publication) {
-    //   throw new Error('The --publication parameter is required when using --substack. Please specify a Substack publication name (e.g., --publication "thegeneralist").');
-    // }
+    const { topic, output, model, bing, tavily, youtube, keywords } = argv;
 
     // Initialize Tavily if needed for news search
     if (tavily > 0) {
@@ -726,37 +614,27 @@ async function main() {
     console.log('Starting research tasks in parallel...');
 
     // Run all research tasks in parallel
-    const [newsArticles, redditPosts, youtubeVideos, substackPosts] = await Promise.all([
+    const [newsArticles, youtubeVideos] = await Promise.all([
       // Fetch news articles if requested (either Bing or Tavily or both)
       (bing > 0 || tavily > 0) ? fetchNewsArticles(topic, bing, tavily) : Promise.resolve([]),
 
-      // Fetch Reddit posts if requested
-      reddit > 0 ? fetchRedditPosts(topic, reddit, subreddit) : Promise.resolve([]),
-
       // Fetch YouTube videos if requested
       youtube > 0 ? fetchYouTubeVideos(topic, youtube) : Promise.resolve([]),
-
-      // Fetch Substack posts if requested
-      substack > 0 ? fetchSubstackPosts(topic, substack, publication, substackSort) : Promise.resolve([]),
     ]);
 
     console.log('\nResearch completed:');
     console.log(`- News articles: ${newsArticles.length}`);
-    console.log(`- Reddit posts: ${redditPosts.length}`);
     console.log(`- YouTube videos: ${youtubeVideos.length}`);
-    console.log(`- Substack articles: ${substackPosts.length}\n`);
 
     // Save raw research data
     const researchData = {
       newsArticles,
-      redditPosts,
       youtubeVideos,
-      substackPosts
     };
     saveResearchData(researchData, topic, output);
 
     // Generate blog content
-    const blogContent = await generateBlogContent(topic, newsArticles, redditPosts, youtubeVideos, substackPosts, model, keywords);
+    const blogContent = await generateBlogContent(topic, newsArticles, youtubeVideos, model, keywords);
 
     // Write to markdown file
     writeToMarkdownFile(blogContent, output);

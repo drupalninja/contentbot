@@ -1,6 +1,6 @@
 # ContentBot
 
-A Node.js script that generates blog content using Groq AI, with the ability to incorporate current news articles, Reddit posts, and YouTube videos.
+A Node.js script that generates blog content using Groq AI, with the ability to incorporate current news articles and YouTube videos.
 
 ## Features
 
@@ -8,7 +8,6 @@ A Node.js script that generates blog content using Groq AI, with the ability to 
 - Automatically fetch and incorporate relevant news articles from multiple sources:
   - Bing News
   - Tavily Search API
-- Scrape and integrate Reddit posts related to your topic
 - Scrape and integrate YouTube videos related to your topic
 - Format output in Markdown with proper headings, lists, and emphasis
 - Customize the AI model used for generation
@@ -54,7 +53,7 @@ This will generate a blog post about your topic and save it to `./output/blog-po
 ### Advanced Options
 
 ```bash
-node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --model "llama3-8b-8192" --bing 3 --tavily 2 --reddit 5 --youtube 3 --subreddit "technology"
+node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --model "llama3-8b-8192" --bing 3 --tavily 2 --youtube 3
 ```
 
 #### Options:
@@ -64,45 +63,25 @@ node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --mo
 - `--model`, `-m`: Groq model to use (default: `llama3-70b-8192`)
 - `--bing`, `-b`: Number of Bing news articles to fetch (0-5, default: 3)
 - `--tavily`: Number of Tavily search results to fetch (0-5, default: 0)
-- `--reddit`, `-r`: Number of Reddit posts to fetch (0-10, default: 0)
 - `--youtube`, `-y`: Number of YouTube videos to fetch (0-5, default: 0)
-- `--subreddit`, `-s`: Specific subreddit to search in (optional)
 - `--help`, `-h`: Show help
 
 ## Examples
 
-Generate a blog post about AI ethics with Bing news, Tavily search, Reddit posts, and YouTube videos:
+Generate a blog post about AI ethics with Bing news, Tavily search, and YouTube videos:
 ```bash
-npm run create-blog -- --topic "Artificial Intelligence Ethics" --bing 2 --tavily 2 --reddit 5 --youtube 3
+npm run create-blog -- --topic "Artificial Intelligence Ethics" --bing 2 --tavily 2 --youtube 3
 ```
 
-Generate a blog post about climate change with only Tavily search results and Reddit posts from the "environment" subreddit:
+Generate a blog post about climate change with only Tavily search results:
 ```bash
-npm run create-blog -- --topic "Climate Change" --bing 0 --tavily 3 --reddit 7 --youtube 0 --subreddit "environment"
+npm run create-blog -- --topic "Climate Change" --bing 0 --tavily 3 --youtube 0
 ```
 
 Generate a blog post about cryptocurrency using a different model:
 ```bash
-npm run create-blog -- --topic "Cryptocurrency Trends" --model "llama3-8b-8192" --bing 2 --reddit 3 --youtube 2
+npm run create-blog -- --topic "Cryptocurrency Trends" --model "llama3-8b-8192" --bing 2 --youtube 2
 ```
-
-## Scraping Reddit Posts Separately
-
-You can also scrape Reddit posts separately without generating a blog post:
-
-```bash
-npm run scrape-reddit -- --query "Your Search Query" --max 10 --output "./output/reddit-posts.json"
-```
-
-#### Options:
-
-- `--query`, `-q`: Search query for Reddit posts (required)
-- `--max`, `-m`: Maximum number of posts to fetch (1-25, default: 5)
-- `--output`, `-o`: Output JSON file path (default: `./output/reddit-posts.json`)
-- `--subreddit`, `-s`: Specific subreddit to search in (optional)
-- `--sort`: Sort method (relevance, hot, new, top) (default: relevance)
-- `--time`, `-t`: Time period for results (hour, day, week, month, year, all) (default: week)
-- `--help`, `-h`: Show help
 
 ## Scraping YouTube Videos Separately
 

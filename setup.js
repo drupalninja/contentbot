@@ -155,24 +155,10 @@ function showUsage() {
   console.log('  npm run create-blog -- --topic "Your Topic Here"');
   console.log('');
   console.log('Advanced options:');
-  console.log('  node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --model "llama3-8b-8192" --bing 3 --tavily 2 --reddit 5 --youtube 2 --subreddit "technology" --substack 3');
-  console.log('  (You can optionally add --publication "stratechery" to specify a Substack publication)');
-  console.log('');
-  console.log('Reddit scraping:');
-  console.log('  npm run scrape-reddit -- --query "Your Search Query" --max 10 --subreddit "technology"');
+  console.log('  node create-blog.js --topic "Your Topic" --output "./output/custom-name.md" --model "llama3-8b-8192" --bing 3 --tavily 2 --youtube 2');
   console.log('');
   console.log('YouTube scraping:');
   console.log('  npm run scrape-youtube -- --query "Your Search Query" --max 5');
-  console.log('');
-  console.log('Substack scraping:');
-  console.log('  npm run scrape-substack -- --query "Your Search Query" --max 5 --publication "stratechery"');
-  console.log('  npm run scrape-substack -- --query "Your Search Query" --max 5 --publication "stratechery" --sort recent');
-  console.log('  (Sort options: recent, top, oldest)');
-  console.log('  (Replace "stratechery" with any Substack publication name, e.g., "thegeneralist", "lenny", etc.)');
-  console.log('');
-  console.log('Substack discovery:');
-  console.log('  npm run scrape-substack -- --query "Your Search Query" --max 5 --discover --sort recent');
-  console.log('  (This will automatically use the first relevant Substack publication it finds)');
   console.log('');
   console.log('For more information, see the README.md file.');
   console.log('');
@@ -184,22 +170,18 @@ function showUsage() {
           topic = 'Artificial Intelligence';
         }
 
-        rl.question('Include Reddit posts in the test? (y/n): ', (includeReddit) => {
-          const redditOption = includeReddit.toLowerCase() === 'y' ? '--reddit 3' : '';
+        console.log(`Generating a test blog post about "${topic}"...`);
+        try {
+          execSync(`node create-blog.js --topic "${topic}" --output "./output/test-blog.md" --bing 2`, { stdio: 'inherit' });
+          console.log('');
+          console.log('Test blog post generated successfully!');
+          console.log('You can find it at ./output/test-blog.md');
+        }
+        catch (error) {
+          console.error('Error generating test blog post:', error.message);
+        }
 
-          console.log(`Generating a test blog post about "${topic}"...`);
-          try {
-            execSync(`node create-blog.js --topic "${topic}" --output "./output/test-blog.md" --bing 2 ${redditOption}`, { stdio: 'inherit' });
-            console.log('');
-            console.log('Test blog post generated successfully!');
-            console.log('You can find it at ./output/test-blog.md');
-          }
-          catch (error) {
-            console.error('Error generating test blog post:', error.message);
-          }
-
-          rl.close();
-        });
+        rl.close();
       });
     }
     else {
