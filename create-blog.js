@@ -6,53 +6,12 @@ const path = require('path');
 const { Groq } = require('groq-sdk');
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
-const https = require('https');
 const { execSync } = require('child_process');
 
 // Initialize Groq client
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
-
-// Initialize Tavily client if API key is available
-let tavilyInitialized = false;
-let tavilyClient = null;
-
-// Function to initialize Tavily
-async function initTavily() {
-  if (!process.env.TAVILY_API_KEY || tavilyInitialized) {
-    return;
-  }
-
-  try {
-    const tavilyModule = await import('tavily');
-
-    // Based on the output, we know the module has TavilyClient and tavily properties
-    if (tavilyModule.TavilyClient) {
-      tavilyClient = new tavilyModule.TavilyClient({
-        apiKey: process.env.TAVILY_API_KEY,
-      });
-      tavilyInitialized = true;
-      console.log('Tavily API initialized successfully (TavilyClient).');
-    } else if (tavilyModule.tavily) {
-      tavilyClient = new tavilyModule.tavily({
-        apiKey: process.env.TAVILY_API_KEY,
-      });
-      tavilyInitialized = true;
-      console.log('Tavily API initialized successfully (tavily).');
-    } else if (tavilyModule.default) {
-      tavilyClient = new tavilyModule.default({
-        apiKey: process.env.TAVILY_API_KEY,
-      });
-      tavilyInitialized = true;
-      console.log('Tavily API initialized successfully (default).');
-    } else {
-      console.error('Failed to initialize Tavily API: Unsupported module structure', Object.keys(tavilyModule));
-    }
-  } catch (error) {
-    console.error('Failed to initialize Tavily API:', error.message);
-  }
-}
 
 // Parse command line arguments
 const argv = yargs(hideBin(process.argv))
@@ -101,160 +60,6 @@ const argv = yargs(hideBin(process.argv))
   .argv;
 
 /**
- * Fetch news articles related to a topic using Bing News
- * @param {string} topic - The topic to search for
- * @param {number} count - Number of articles to fetch
- * @returns {Promise<Array>} - Array of news articles
- */
-async function fetchBingNewsArticles(topic, count = 3) {
-  if (count <= 0) {
-    return [];
-  }
-
-  count = Math.min(count, 5); // Limit to 5 articles max
-  console.log(`Fetching ${count} news articles from Bing about "${topic}"...`);
-
-  return new Promise((resolve, reject) => {
-    const encodedTopic = encodeURIComponent(topic);
-    const url = `https://www.bing.com/news/search?q=${encodedTopic}&format=rss`;
-
-    const options = {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      }
-    };
-
-    https.get(url, options, (res) => {
-      let data = '';
-
-      // Handle redirects and error status codes
-      if (res.statusCode !== 200) {
-        console.error(`Received status code ${res.statusCode} from Bing News API`);
-        resolve([]);
-        return;
-      }
-
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-
-      res.on('end', () => {
-        try {
-          console.log(`Received ${data.length} bytes of data from Bing News`);
-
-          // First, check if we actually received RSS content
-          if (!data.includes('<rss') && !data.includes('<item>')) {
-            console.error('Response does not appear to be valid RSS content');
-            resolve([]);
-            return;
-          }
-
-          // Extract articles from RSS feed using a more robust regex
-          const articles = [];
-
-          // Two regex patterns to try
-          const regexPatterns = [
-            /<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>[\s\S]*?<description>(.*?)<\/description>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/g,
-            /<item>\s*<title>(.*?)<\/title>\s*<link>(.*?)<\/link>\s*<description>(.*?)<\/description>.*?<pubDate>(.*?)<\/pubDate>/gs
-          ];
-
-          // Try both patterns
-          for (const pattern of regexPatterns) {
-            let match;
-            while ((match = pattern.exec(data)) !== null && articles.length < count) {
-              if (match[1] && match[2] && match[3] && match[4]) {
-                const title = match[1]
-                  .replace(/&quot;/g, '"')
-                  .replace(/&amp;/g, '&')
-                  .replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1');
-
-                const link = match[2]
-                  .replace(/&amp;/g, '&');
-
-                const description = match[3]
-                  .replace(/&quot;/g, '"')
-                  .replace(/&amp;/g, '&')
-                  .replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1')
-                  .replace(/<.*?>/g, '');
-
-                const pubDate = match[4];
-
-                articles.push({
-                  title,
-                  link,
-                  description,
-                  pubDate,
-                  source: 'Bing News'
-                });
-              }
-            }
-
-            // If we found articles with this pattern, stop trying
-            if (articles.length > 0) {
-              break;
-            }
-          }
-
-          console.log(`Found ${articles.length} news articles from Bing.`);
-          resolve(articles);
-        } catch (error) {
-          console.error('Error parsing Bing news articles:', error.message);
-          resolve([]); // Return empty array on error
-        }
-      });
-    }).on('error', (error) => {
-      console.error('Error fetching Bing news articles:', error.message);
-      resolve([]); // Return empty array on error
-    });
-  });
-}
-
-/**
- * Fetch news articles related to a topic using Tavily
- * @param {string} topic - The topic to search for
- * @param {number} count - Number of articles to fetch
- * @returns {Promise<Array>} - Array of news articles
- */
-async function fetchTavilyNewsArticles(topic, count = 3) {
-  if (count <= 0 || !tavilyClient) {
-    return [];
-  }
-
-  count = Math.min(count, 5); // Limit to 5 articles max
-  console.log(`Fetching ${count} news articles from Tavily about "${topic}"...`);
-
-  try {
-    const response = await tavilyClient.search({
-      query: `latest news about ${topic}`,
-      search_depth: "advanced",
-      include_domains: ["news.google.com", "cnn.com", "bbc.com", "reuters.com", "bloomberg.com", "nytimes.com", "wsj.com", "theguardian.com", "apnews.com", "npr.org"],
-      max_results: count,
-      include_answer: false,
-      include_raw_content: false,
-    });
-
-    if (response && response.results && response.results.length > 0) {
-      const articles = response.results.map(result => ({
-        title: result.title || 'No title available',
-        link: result.url,
-        description: result.content || result.snippet || 'No description available',
-        pubDate: new Date().toISOString(), // Tavily doesn't provide dates, use current date
-        source: 'Tavily Search'
-      }));
-
-      console.log(`Found ${articles.length} news articles from Tavily.`);
-      return articles;
-    } else {
-      console.log('No news articles found from Tavily.');
-      return [];
-    }
-  } catch (error) {
-    console.error('Error fetching Tavily news articles:', error.message);
-    return [];
-  }
-}
-
-/**
  * Fetch news articles related to a topic using multiple sources
  * @param {string} topic - The topic to search for
  * @param {number} bingCount - Number of Bing news articles to fetch
@@ -266,18 +71,74 @@ async function fetchNewsArticles(topic, bingCount = 3, tavilyCount = 0) {
 
   // Fetch from Bing if requested
   if (bingCount > 0) {
-    const bingArticles = await fetchBingNewsArticles(topic, bingCount);
-    allArticles.push(...bingArticles);
-    console.log(`Added ${bingArticles.length} articles from Bing.`);
+    try {
+      // Create a temporary file to store the articles
+      const tempFile = path.join(__dirname, 'temp-bing-articles.json');
+
+      // Build the command
+      const command = `node scrape-bing.js --query "${topic}" --max ${bingCount} --output "${tempFile}"`;
+
+      console.log(`Fetching ${bingCount} news articles from Bing about "${topic}"...`);
+
+      // Run the scrape-bing.js script
+      execSync(command, {
+        stdio: 'inherit'
+      });
+
+      // Check if the file exists
+      if (fs.existsSync(tempFile)) {
+        // Read the articles from the file
+        const articlesData = fs.readFileSync(tempFile, 'utf8');
+        const bingArticles = JSON.parse(articlesData);
+
+        // Delete the temporary file
+        fs.unlinkSync(tempFile);
+
+        allArticles.push(...bingArticles);
+        console.log(`Added ${bingArticles.length} articles from Bing.`);
+      } else {
+        console.log('No Bing articles were found. Continuing without Bing articles.');
+      }
+    } catch (error) {
+      console.error('Error fetching Bing news articles:', error.message);
+      console.log('Continuing without Bing articles.');
+    }
   }
 
-  // Fetch from Tavily if requested and available
-  if (tavilyCount > 0 && tavilyClient) {
-    const tavilyArticles = await fetchTavilyNewsArticles(topic, tavilyCount);
-    allArticles.push(...tavilyArticles);
-    console.log(`Added ${tavilyArticles.length} articles from Tavily.`);
-  } else if (tavilyCount > 0 && !tavilyClient) {
-    console.log('Tavily API is not available. To enable Tavily search, add TAVILY_API_KEY to your .env file.');
+  // Fetch from Tavily if requested
+  if (tavilyCount > 0) {
+    try {
+      // Create a temporary file to store the articles
+      const tempFile = path.join(__dirname, 'temp-tavily-articles.json');
+
+      // Build the command
+      const command = `node scrape-tavily.js --query "${topic}" --max ${tavilyCount} --output "${tempFile}"`;
+
+      console.log(`Fetching ${tavilyCount} news articles from Tavily about "${topic}"...`);
+
+      // Run the scrape-tavily.js script
+      execSync(command, {
+        stdio: 'inherit'
+      });
+
+      // Check if the file exists
+      if (fs.existsSync(tempFile)) {
+        // Read the articles from the file
+        const articlesData = fs.readFileSync(tempFile, 'utf8');
+        const tavilyArticles = JSON.parse(articlesData);
+
+        // Delete the temporary file
+        fs.unlinkSync(tempFile);
+
+        allArticles.push(...tavilyArticles);
+        console.log(`Added ${tavilyArticles.length} articles from Tavily.`);
+      } else {
+        console.log('No Tavily articles were found. Continuing without Tavily articles.');
+      }
+    } catch (error) {
+      console.error('Error fetching Tavily news articles:', error.message);
+      console.log('Continuing without Tavily articles.');
+    }
   }
 
   return allArticles;
@@ -449,13 +310,13 @@ SEO guidelines:
       let sourceText = '';
 
       if (source.platform === 'News') {
-        sourceText = `Source ${sourceNumber} (${source.source || 'News article'}): ${source.title}\n${source.content || source.text}`;
+        sourceText = `Source ${sourceNumber} (${source.source || 'News article'}): ${source.title}\n${source.content || source.text || source.description}`;
       }
       else if (source.platform === 'YouTube') {
-        sourceText = `Source ${sourceNumber} (YouTube video): ${source.title}\nBy ${source.author}\n${source.description}`;
+        sourceText = `Source ${sourceNumber} (YouTube video): ${source.title}\nBy ${source.author || source.channelTitle}\n${source.description}`;
       }
       else {
-        sourceText = `Source ${sourceNumber}: ${source.title}\n${source.content || source.text}`;
+        sourceText = `Source ${sourceNumber}: ${source.title}\n${source.content || source.text || source.description}`;
       }
 
       return `[${sourceNumber}] ${sourceText}\n\n`;
@@ -605,11 +466,6 @@ async function main() {
     }
 
     const { topic, output, model, bing, tavily, youtube, keywords } = argv;
-
-    // Initialize Tavily if needed for news search
-    if (tavily > 0) {
-      await initTavily();
-    }
 
     console.log('Starting research tasks in parallel...');
 

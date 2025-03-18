@@ -8,7 +8,9 @@
     "create-blog": "node create-blog.js",
     "generate-topics": "node generate-topics.js",
     "setup": "node setup.js",
-    "scrape-youtube": "node scrape-youtube.js"
+    "scrape-youtube": "node scrape-youtube.js",
+    "scrape-bing": "node scrape-bing.js",
+    "scrape-tavily": "node scrape-tavily.js"
   },
   "keywords": [
     "blog",
