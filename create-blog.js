@@ -448,9 +448,17 @@ Format the blog post with proper Markdown syntax including:
 
 VERY IMPORTANT: You MUST cite sources when using information from them. Use the format [X] where X is the source number. For example, "According to a recent study [3]..." or "As mentioned in a recent article [5]...". Every major fact or quote should have a citation.
 
-IMPORTANT: DO NOT include a "Meta Description" or "Keywords" section at the end of the blog post. This information should ONLY be in the front matter.
+IMPORTANT: At the end of the blog post, after the conclusion, include a "## References" section that lists all the sources you cited in the article. Format it EXACTLY as follows with NO ADDITIONAL TEXT:
 
-The blog post should be between 800-1200 words.
+## References
+
+[1] "Title of Article/Post/Video". https://actual-url-here.com
+[2] "Title of Article/Post/Video". https://another-url-here.com
+... and so on for all sources cited.
+
+DO NOT include source types like "Bing News:" or "YouTube video:" in the references. Only include the title in quotes followed by the actual URL of the source.
+
+The blog post should be between 800-1200 words (not including references).
 
 Here are your sources:
 
