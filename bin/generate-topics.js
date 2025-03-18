@@ -322,11 +322,14 @@ function saveResearchData(researchData, category, outputPath) {
  * @param {string} audience - Target audience for the topics
  * @param {string} model - The Groq model to use
  * @param {string} keywords - Keywords to include in topics (comma-separated)
+ * @param {Object} additionalResearch - Additional research data
  * @returns {Promise<string>} - The generated topics content
  */
-async function generateTopicIdeas(category, newsArticles, count, audience, model, keywords) {
+async function generateTopicIdeas(category, newsArticles, count, audience, model, keywords, additionalResearch = {}) {
   try {
     console.log(`Generating ${count} topic ideas for "${category}" category using ${model}...`);
+
+    const { redditPosts = [], youtubeVideos = [] } = additionalResearch;
 
     let newsArticlesText = '';
     if (newsArticles.length > 0) {
@@ -337,11 +340,50 @@ ${newsArticles.map((article, index) => `
 Article ${index + 1}:
 Title: ${article.title}
 Description: ${article.description}
-Date: ${article.pubDate}
+Date: ${article.pubDate || 'Recent'}
 Link: ${article.link}
 `).join('\n')}
 
 Please use these articles to identify current trends, controversies, or interesting angles for the topic ideas.
+`;
+    }
+
+    let redditPostsText = '';
+    if (redditPosts.length > 0) {
+      redditPostsText = `
+Here are some recent Reddit discussions related to this category:
+
+${redditPosts.map((post, index) => `
+Reddit Post ${index + 1}:
+Title: ${post.title}
+Subreddit: r/${post.subreddit}
+Author: u/${post.author}
+Upvotes: ${post.upvotes}
+Comments: ${post.commentCount || 'Multiple'}
+URL: ${post.url}
+${post.content ? `Content snippet: ${post.content.substring(0, 200)}...` : ''}
+`).join('\n')}
+
+Please use these Reddit discussions to identify what real people are currently talking about related to this topic.
+`;
+    }
+
+    let youtubeVideosText = '';
+    if (youtubeVideos.length > 0) {
+      youtubeVideosText = `
+Here are some recent YouTube videos related to this category:
+
+${youtubeVideos.map((video, index) => `
+YouTube Video ${index + 1}:
+Title: ${video.title}
+Channel: ${video.channelTitle}
+Published: ${video.publishedAt || 'Recently'}
+Views: ${video.viewCount?.toLocaleString() || 'Multiple'}
+URL: ${video.url}
+${video.description ? `Description snippet: ${video.description.substring(0, 200)}...` : ''}
+`).join('\n')}
+
+Please use these YouTube videos to identify current trends, popular content formats, and discussion topics.
 `;
     }
 
@@ -359,6 +401,7 @@ ${keywordsList.map(keyword => `- "${keyword}"`).join('\n')}
 You are a specialized AI that ONLY outputs valid, parseable JSON.
 
 Your task is to generate ${count} unique and engaging blog topic ideas related to "${category}" for a ${audience} audience.
+Your topic ideas MUST be based on the CURRENT and UP-TO-DATE information I've provided about this subject.
 
 For each topic idea, include:
 - A catchy, SEO-friendly title
@@ -384,21 +427,25 @@ The output MUST be valid JSON with this exact structure:
 }
 
 ${newsArticlesText}
+${redditPostsText}
+${youtubeVideosText}
 ${keywordsText}
 
 IMPORTANT:
-1. Make topics specific, actionable, and based on current trends
-2. Focus on unique angles and innovative approaches
-3. Your response MUST only contain the JSON object - no markdown, no explanations, no extra text
-4. Ensure all JSON keys and string values are properly double-quoted
-5. Do not use single quotes in your JSON
-6. Do not include comments in the JSON
-7. Verify your response is valid JSON before returning it
+1. Make topics CURRENT and UP-TO-DATE - avoid suggesting outdated information
+2. Make topics specific, actionable, and based on current trends
+3. Focus on unique angles and innovative approaches
+4. Your response MUST only contain the JSON object - no markdown, no explanations, no extra text
+5. Ensure all JSON keys and string values are properly double-quoted
+6. Do not use single quotes in your JSON
+7. Do not include comments in the JSON
+8. Verify your response is valid JSON before returning it
 `;
 
     // Save the prompt to a file
     savePrompt(prompt, category, argv.output);
 
+    // Generate completion with Groq
     const completion = await groq.chat.completions.create({
       messages: [
         {
@@ -409,52 +456,42 @@ IMPORTANT:
       model: model,
     });
 
-    let content = completion.choices[0]?.message?.content || '';
+    // Get the response content
+    const content = completion.choices[0]?.message?.content;
 
-    // Clean up the content - remove any non-JSON text
-    const jsonMatch = content.match(/(\{[\s\S]*\})/);
-    if (jsonMatch) {
-      content = jsonMatch[0];
+    if (!content) {
+      throw new Error('No content received from Groq API');
     }
 
-    // Further cleanup for common issues
-    content = content.replace(/```json/g, '')
-      .replace(/```/g, '')
-      .replace(/\\"/g, '"')
-      .replace(/\t/g, '  ')
-      .trim();
-
-    // Try to parse the content as JSON to ensure it's valid
+    // Try to parse JSON from the response
     try {
+      // Basic validation to ensure we have valid JSON
       const jsonData = JSON.parse(content);
 
-      // Ensure it has the expected structure
-      if (!jsonData.topics) {
-        console.warn('JSON is valid but missing topics array. Adding empty topics array.');
-        jsonData.topics = [];
-      }
-
-      // Add metadata if missing
+      // Ensure the expected structure is present
+      if (!jsonData.topics) jsonData.topics = [];
       if (!jsonData.category) jsonData.category = category;
       if (!jsonData.audience) jsonData.audience = audience;
       if (!jsonData.generatedAt) jsonData.generatedAt = new Date().toISOString().split('T')[0];
 
+      // Add additional research data
+      jsonData.additionalResearch = additionalResearch;
+
       return JSON.stringify(jsonData, null, 2);
     } catch (error) {
-      console.error('Failed to parse JSON:', error.message);
-      console.error('Creating a fallback JSON structure with the information we have.');
+      console.error('Error parsing JSON from API response:', error.message);
+      console.log('Raw content received:', content);
 
-      // Create a fallback JSON structure
-      const fallbackData = {
+      // Return a fallback JSON with error information
+      return JSON.stringify({
         category,
         audience,
         generatedAt: new Date().toISOString().split('T')[0],
         topics: [],
         rawContent: content,
-        error: `Failed to parse JSON: ${error.message}`
-      };
-
-      return JSON.stringify(fallbackData, null, 2);
+        error: `Failed to parse JSON: ${error.message}`,
+        additionalResearch: additionalResearch
+      }, null, 2);
     }
   } catch (error) {
     console.error('Error generating topic ideas:', error.message);
@@ -497,7 +534,8 @@ function writeToJsonFile(content, outputPath) {
 }
 
 // Main function to generate topics
-async function generateTopics(category, count = 10, audience = 'general', outputPath = './output/topics.json', model = 'llama3-70b-8192', keywords = []) {
+async function generateTopics(category, count = 10, audience = 'general', outputPath = './output/topics.json', model = 'llama3-70b-8192', keywords = [],
+  options = { bingCount: 5, tavilyCount: 5, researchMode: 'enhanced' }) {
   try {
     // Create output directory if it doesn't exist and outputPath is provided
     if (outputPath) {
@@ -509,11 +547,69 @@ async function generateTopics(category, count = 10, audience = 'general', output
 
     console.log(`Generating ${count} topic ideas for ${category} targeting ${audience}...`);
 
-    // Fetch news articles for research
-    const newsArticles = await fetchNewsArticles(category, 3, 2);
+    // Get default or passed option values
+    const bingCount = options.bingCount || 5;
+    const tavilyCount = options.tavilyCount || 5;
+    const researchMode = options.researchMode || 'enhanced';
 
-    // Generate topic ideas
-    const topicIdeas = await generateTopicIdeas(category, newsArticles, count, audience, model, keywords);
+    console.log(`Using research mode: ${researchMode}`);
+    console.log(`Fetching news articles: ${bingCount} from Bing, ${tavilyCount} from Tavily`);
+
+    // Fetch news articles for research
+    const newsArticles = await fetchNewsArticles(category, bingCount, tavilyCount);
+
+    // Try to import additional research modules if in enhanced mode
+    let redditPosts = [];
+    let youtubeVideos = [];
+
+    if (researchMode === 'enhanced') {
+      try {
+        // Try to load the Reddit scraping function
+        const redditModule = require('./scrape-reddit');
+        if (redditModule && redditModule.fetchRedditPosts) {
+          console.log(`Fetching Reddit posts for ${category}...`);
+          redditPosts = await redditModule.fetchRedditPosts(category, 3);
+          console.log(`Fetched ${redditPosts.length} Reddit posts`);
+        }
+      } catch (error) {
+        console.log(`Reddit research not available: ${error.message}`);
+      }
+
+      try {
+        // Try to load the YouTube scraping function
+        const youtubeModule = require('./scrape-youtube');
+        if (youtubeModule && youtubeModule.fetchYouTubeVideos) {
+          console.log(`Fetching YouTube videos for ${category}...`);
+          youtubeVideos = await youtubeModule.fetchYouTubeVideos(category, 3);
+          console.log(`Fetched ${youtubeVideos.length} YouTube videos`);
+        }
+      } catch (error) {
+        console.log(`YouTube research not available: ${error.message}`);
+      }
+    }
+
+    // Combine all research data
+    const researchData = {
+      newsArticles,
+      redditPosts,
+      youtubeVideos
+    };
+
+    // Save research data if outputPath is provided
+    if (outputPath) {
+      saveResearchData(researchData, category, outputPath);
+    }
+
+    // Generate topic ideas with enhanced research
+    const topicIdeas = await generateTopicIdeas(
+      category,
+      newsArticles,
+      count,
+      audience,
+      model,
+      keywords,
+      { redditPosts, youtubeVideos }
+    );
 
     // Parse the JSON string to get the object
     const topicsObject = JSON.parse(topicIdeas);
