@@ -95,7 +95,10 @@ async function fetchBingNewsArticles(topic, count = 3) {
             });
           }
 
-          console.log(`Found ${articles.length} news articles from Bing.`);
+          console.log(`Found ${articles.length} news articles from Bing:`);
+          articles.forEach((article, index) => {
+            console.log(`  ${index + 1}. ${article.title}`);
+          });
           resolve(articles);
         } catch (error) {
           console.error('Error parsing Bing news articles:', error.message);
@@ -142,7 +145,10 @@ async function fetchTavilyNewsArticles(topic, count = 3) {
         source: 'Tavily Search'
       }));
 
-      console.log(`Found ${articles.length} news articles from Tavily.`);
+      console.log(`Found ${articles.length} news articles from Tavily:`);
+      articles.forEach((article, index) => {
+        console.log(`  ${index + 1}. ${article.title}`);
+      });
       return articles;
     } else {
       console.log('No news articles found from Tavily.');
