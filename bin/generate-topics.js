@@ -526,7 +526,7 @@ function writeToJsonFile(content, outputPath) {
 }
 
 // Main function to generate topics
-async function generateTopics(category, count = 10, audience = 'general', outputPath = './output/topics.json', model = 'llama3-70b-8192', keywords = [],
+async function generateTopics(category, count = 5, audience = 'general', outputPath = './output/topics.json', model = 'llama3-70b-8192', keywords = [],
   options = { bingCount: 5, tavilyCount: 5, researchMode: 'enhanced' }) {
   try {
     // Create output directory if it doesn't exist and outputPath is provided
